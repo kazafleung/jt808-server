@@ -79,13 +79,20 @@ public class JT808Endpoint {
     @Mapping(types = 终端鉴权, desc = "终端鉴权")
     public T0001 T0102(T0102 message, Session session) {
         session.register(message);
-        Device device = new Device();
         String[] token = message.getToken().split(",");
-        device.setProtocolVersion(message.getProtocolVersion());
-        device.setMobileNo(message.getClientId());
-        device.setDeviceId(token[0]);
-        if (token.length > 1)
-            device.setPlateNo(token[1]);
+        String deviceId = token[0];
+        String plateNo = token.length > 1 ? token[1] : null;
+
+        Device device = deviceService.findByMobileNo(message.getClientId())
+                .orElseGet(() -> {
+                    // Device not in DB yet (e.g. registered before MongoDB was added)
+                    Device d = new Device();
+                    d.setProtocolVersion(message.getProtocolVersion());
+                    d.setMobileNo(message.getClientId());
+                    d.setDeviceId(deviceId);
+                    d.setPlateNo(plateNo);
+                    return deviceService.saveOrUpdate(d);
+                });
         session.setAttribute(SessionKey.Device, device);
 
         T0001 result = new T0001();

@@ -7,6 +7,7 @@ import org.yzh.web.model.entity.Device;
 import org.yzh.web.repository.DeviceRepository;
 
 import java.time.LocalDateTime;
+import java.util.Optional;
 
 @Slf4j
 @Service
@@ -20,6 +21,10 @@ public class DeviceService {
      * If the device (by mobileNo) already exists, update its info.
      * Returns the saved document (with MongoDB _id populated).
      */
+    public Optional<Device> findByMobileNo(String mobileNo) {
+        return deviceRepository.findByMobileNo(mobileNo);
+    }
+
     public Device saveOrUpdate(Device device) {
         return deviceRepository.findByMobileNo(device.getMobileNo())
                 .map(existing -> {
