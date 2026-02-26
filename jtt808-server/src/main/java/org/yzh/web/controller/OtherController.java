@@ -55,10 +55,10 @@ public class OtherController {
     @GetMapping("device/option")
     public Collection<Device> getClientId() {
         AdapterCollection<Session, Device> result = new AdapterCollection<>(sessionManager.values(), session -> {
-            DeviceDO device = session.getAttribute(SessionKey.Device);
+            Device device = session.getAttribute(SessionKey.Device);
             if (device != null)
                 return device;
-            return new DeviceDO().setMobileNo(session.getClientId());
+            return new Device().setMobileNo(session.getClientId());
         });
         return result;
     }

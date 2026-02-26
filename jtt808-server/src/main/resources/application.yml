@@ -3,7 +3,7 @@ spring:
     name: jt808
   data:
     mongodb:
-      uri: 
+      uri: mongodb+srv://taxieco_dev:cDWggNaNhAi0jB6e@taxieco.nfp6huo.mongodb.net/zendo
   jackson:
     time-zone: GMT+8
     date-format: yyyy-MM-dd HH:mm:ss
