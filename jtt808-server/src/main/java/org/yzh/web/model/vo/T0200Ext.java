@@ -3,7 +3,7 @@ package org.yzh.web.model.vo;
 import io.github.yezhihao.netmc.session.Session;
 import org.yzh.protocol.commons.transform.attribute.*;
 import org.yzh.protocol.t808.T0200;
-import org.yzh.web.model.entity.DeviceDO;
+import org.yzh.web.model.entity.Device;
 import org.yzh.web.model.enums.SessionKey;
 
 import java.util.ArrayList;
@@ -25,7 +25,7 @@ public class T0200Ext {
         this.alarms = getAlarms(t);
 
 
-        DeviceDO device = session.getAttribute(SessionKey.Device);
+        Device device = session.getAttribute(SessionKey.Device);
         if (device != null) device.updateLocation(t);
     }
 

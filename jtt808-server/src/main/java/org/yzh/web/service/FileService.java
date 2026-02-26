@@ -18,7 +18,7 @@ import org.yzh.protocol.jsatl12.T1211;
 import org.yzh.protocol.t808.T0200;
 import org.yzh.protocol.t808.T0801;
 import org.yzh.web.config.JTProperties;
-import org.yzh.web.model.entity.DeviceDO;
+import org.yzh.web.model.entity.Device;
 import org.yzh.web.model.enums.SessionKey;
 
 import java.io.File;
@@ -182,7 +182,7 @@ public class FileService {
 
     /** 多媒体数据上传 */
     public boolean saveMediaFile(T0801 message) {
-        DeviceDO device = message.getSession().getAttribute(SessionKey.Device);
+        Device device = message.getSession().getAttribute(SessionKey.Device);
         T0200 location = message.getLocation();
 
         StringBuilder filename = new StringBuilder(32);

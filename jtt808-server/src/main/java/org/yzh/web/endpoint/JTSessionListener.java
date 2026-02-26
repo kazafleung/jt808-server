@@ -5,7 +5,7 @@ import io.github.yezhihao.netmc.session.Session;
 import io.github.yezhihao.netmc.session.SessionListener;
 import org.springframework.stereotype.Component;
 import org.yzh.protocol.basics.JTMessage;
-import org.yzh.web.model.entity.DeviceDO;
+import org.yzh.web.model.entity.Device;
 import org.yzh.web.model.enums.SessionKey;
 
 import java.util.function.BiConsumer;
@@ -29,7 +29,7 @@ public class JTSessionListener implements SessionListener {
             request.setMessageId(request.reflectMessageId());
         }
 
-        DeviceDO device = session.getAttribute(SessionKey.Device);
+        Device device = session.getAttribute(SessionKey.Device);
         if (device != null) {
             int protocolVersion = device.getProtocolVersion();
             if (protocolVersion > 0) {

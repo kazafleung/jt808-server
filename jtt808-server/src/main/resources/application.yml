@@ -1,6 +1,9 @@
 spring:
   application:
     name: jt808
+  data:
+    mongodb:
+      uri: 
   jackson:
     time-zone: GMT+8
     date-format: yyyy-MM-dd HH:mm:ss

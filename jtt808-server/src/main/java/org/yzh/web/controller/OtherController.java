@@ -19,7 +19,7 @@ import org.yzh.commons.model.R;
 import org.yzh.commons.spring.SSEService;
 import org.yzh.commons.util.LogUtils;
 import org.yzh.protocol.codec.JTMessageDecoder;
-import org.yzh.web.model.entity.DeviceDO;
+import org.yzh.web.model.entity.Device;
 import org.yzh.web.model.enums.SessionKey;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -53,8 +53,8 @@ public class OtherController {
 
     @Operation(summary = "获得当前所有在线设备信息")
     @GetMapping("device/option")
-    public Collection<DeviceDO> getClientId() {
-        AdapterCollection<Session, DeviceDO> result = new AdapterCollection<>(sessionManager.values(), session -> {
+    public Collection<Device> getClientId() {
+        AdapterCollection<Session, Device> result = new AdapterCollection<>(sessionManager.values(), session -> {
             DeviceDO device = session.getAttribute(SessionKey.Device);
             if (device != null)
                 return device;

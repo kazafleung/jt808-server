@@ -11,9 +11,11 @@ import org.springframework.stereotype.Component;
 import org.yzh.protocol.basics.JTMessage;
 import org.yzh.protocol.commons.JT808;
 import org.yzh.protocol.t808.*;
-import org.yzh.web.model.entity.DeviceDO;
+import org.yzh.web.model.entity.Device;
 import org.yzh.web.model.enums.SessionKey;
+import org.yzh.web.service.DeviceService;
 import org.yzh.web.service.FileService;
+import org.yzh.web.service.LocationService;
 
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
@@ -27,7 +29,9 @@ import static org.yzh.protocol.commons.JT808.*;
 @RequiredArgsConstructor
 public class JT808Endpoint {
 
+    private final DeviceService deviceService;
     private final FileService fileService;
+    private final LocationService locationService;
 
     @Mapping(types = 终端通用应答, desc = "终端通用应答")
     public Object T0001(T0001 message, Session session) {
@@ -57,12 +61,13 @@ public class JT808Endpoint {
     @Mapping(types = 终端注册, desc = "终端注册")
     public T8100 T0100(T0100 message, Session session) {
         session.register(message);
-        DeviceDO device = new DeviceDO();
+        Device device = new Device();
         device.setProtocolVersion(message.getProtocolVersion());
         device.setMobileNo(message.getClientId());
         device.setDeviceId(message.getDeviceId());
         device.setPlateNo(message.getPlateNo());
-        session.setAttribute(SessionKey.Device, device);
+        Device saved = deviceService.saveOrUpdate(device);
+        session.setAttribute(SessionKey.Device, saved);
 
         T8100 result = new T8100();
         result.setResponseSerialNo(message.getSerialNo());
@@ -74,7 +79,7 @@ public class JT808Endpoint {
     @Mapping(types = 终端鉴权, desc = "终端鉴权")
     public T0001 T0102(T0102 message, Session session) {
         session.register(message);
-        DeviceDO device = new DeviceDO();
+        Device device = new Device();
         String[] token = message.getToken().split(",");
         device.setProtocolVersion(message.getProtocolVersion());
         device.setMobileNo(message.getClientId());
@@ -113,10 +118,15 @@ public class JT808Endpoint {
     @AsyncBatch(poolSize = 2, maxElements = 4000, maxWait = 1000)
     @Mapping(types = 位置信息汇报, desc = "位置信息汇报")
     public void T0200(List<T0200> list) {
+        locationService.saveBatch(list);
     }
 
     @Mapping(types = 定位数据批量上传, desc = "定位数据批量上传")
     public void T0704(T0704 message) {
+        if (message.getItems() != null) {
+            message.getItems().forEach(item -> item.setClientId(message.getClientId()));
+            locationService.saveBatch(message.getItems());
+        }
     }
 
     @Mapping(types = {位置信息查询应答, 车辆控制应答}, desc = "位置信息查询应答/车辆控制应答")

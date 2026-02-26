@@ -8,7 +8,7 @@ import org.yzh.protocol.basics.JTMessage;
 import org.yzh.protocol.commons.JT808;
 import org.yzh.protocol.t808.T0001;
 import org.yzh.protocol.t808.T0200;
-import org.yzh.web.model.entity.DeviceDO;
+import org.yzh.web.model.entity.Device;
 import org.yzh.web.model.enums.SessionKey;
 import org.yzh.web.model.vo.T0200Ext;
 
@@ -76,7 +76,7 @@ public class JTHandlerInterceptor implements HandlerInterceptor<JTMessage> {
 //            return false;//忽略该消息
         }
 
-        DeviceDO device = session.getAttribute(SessionKey.Device);
+        Device device = session.getAttribute(SessionKey.Device);
         if (messageId == JT808.位置信息汇报) {
             T0200 t0200 = (T0200) request;
             if (t0200.getDeviceTime() == null) {
