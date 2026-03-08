@@ -40,8 +40,8 @@ public class LocationRecord {
     /** 报警标志 */
     private int warnBit;
 
-    /** 状态标志 */
-    private int statusBit;
+    /** 状态标志（解码后） */
+    private StatusBits status;
 
     /** 纬度（原始值，实际值 = latitude / 1000000.0） */
     private int latitude;
@@ -73,7 +73,7 @@ public class LocationRecord {
                 .setDeviceTime(msg.getDeviceTime())
                 .setReceivedAt(LocalDateTime.now())
                 .setWarnBit(msg.getWarnBit())
-                .setStatusBit(msg.getStatusBit())
+                .setStatus(StatusBits.from(msg.getStatusBit()))
                 .setLatitude(msg.getLatitude())
                 .setLongitude(msg.getLongitude())
                 .setLat(msg.getLat())
