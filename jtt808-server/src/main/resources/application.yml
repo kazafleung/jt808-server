@@ -48,6 +48,6 @@ jt-server:
       path: ./jt_data/alarm_file
     t9206:
       host: 152.69.210.81
-      port: 21
-      username: test
-      password: test
+      port: 2121
+      username: ftpuser
+      password: ftppass
