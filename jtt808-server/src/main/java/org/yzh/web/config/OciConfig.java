@@ -1,7 +1,7 @@
 package org.yzh.web.config;
 
 import com.oracle.bmc.ConfigFileReader;
-import com.oracle.bmc.auth.AuthenticationDetailsProvider;
+import com.oracle.bmc.auth.AbstractAuthenticationDetailsProvider;
 import com.oracle.bmc.auth.ConfigFileAuthenticationDetailsProvider;
 import com.oracle.bmc.auth.InstancePrincipalsAuthenticationDetailsProvider;
 import com.oracle.bmc.objectstorage.ObjectStorage;
@@ -22,7 +22,7 @@ public class OciConfig {
 
     @Bean
     public ObjectStorage objectStorage() throws IOException {
-        AuthenticationDetailsProvider provider;
+        AbstractAuthenticationDetailsProvider provider;
 
         if (properties.getAuthType() == OciProperties.AuthType.INSTANCE_PRINCIPAL) {
             provider = InstancePrincipalsAuthenticationDetailsProvider.builder().build();
