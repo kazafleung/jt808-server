@@ -24,6 +24,15 @@ mybatis-plus:
 server:
   port: 8100
 
+oci:
+  auth-type: INSTANCE_PRINCIPAL # Options: CONFIG_FILE, INSTANCE_PRINCIPAL
+  config:
+    file-path: ~/.oci/config
+    profile: DEFAULT
+  bucket: zendo-dev
+  namespace: ax0s9dy3myes
+  region: ap-singapore-1
+
 jt-server:
   jt808:
     tcp-port: 7100

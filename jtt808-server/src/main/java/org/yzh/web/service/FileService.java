@@ -3,7 +3,10 @@ package org.yzh.web.service;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.LoadingCache;
 import com.github.benmanes.caffeine.cache.RemovalListener;
+import com.oracle.bmc.objectstorage.ObjectStorage;
+import com.oracle.bmc.objectstorage.requests.PutObjectRequest;
 import io.netty.buffer.ByteBuf;
+import io.netty.buffer.ByteBufInputStream;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -18,12 +21,15 @@ import org.yzh.protocol.jsatl12.T1211;
 import org.yzh.protocol.t808.T0200;
 import org.yzh.protocol.t808.T0801;
 import org.yzh.web.config.JTProperties;
+import org.yzh.web.config.OciProperties;
 import org.yzh.web.model.entity.Device;
 import org.yzh.web.model.enums.SessionKey;
 
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
@@ -46,6 +52,12 @@ public class FileService {
 
     @Resource
     private JTProperties jtProperties;
+
+    @Resource
+    private ObjectStorage objectStorage;
+
+    @Resource
+    private OciProperties ociProperties;
 
     private static final Comparator<long[]> comparator = Comparator.comparingLong((long[] a) -> a[0]).thenComparingLong(a -> a[1]);
 
@@ -206,8 +218,23 @@ public class FileService {
         ByteBuf packet = message.getPacket();
         FileOutputStream fos = null;
         try {
-            fos = new FileOutputStream(new File(dir, filename.toString()));
+            File file = new File(dir, filename.toString());
+            fos = new FileOutputStream(file);
             packet.readBytes(fos.getChannel(), 0, packet.readableBytes());
+            fos.close();
+            fos = null;
+
+            try (FileInputStream fis = new FileInputStream(file)) {
+                PutObjectRequest putObjectRequest = PutObjectRequest.builder()
+                        .bucketName(ociProperties.getBucket())
+                        .namespaceName(ociProperties.getNamespace())
+                        .objectName(deviceId + "/" + filename.toString())
+                        .putObjectBody(fis)
+                        .build();
+                objectStorage.putObject(putObjectRequest);
+            } catch (Exception e) {
+                log.error("OCI Upload Failed", e);
+            }
             return true;
         } catch (IOException e) {
             log.error("多媒体数据保存失败", e);
