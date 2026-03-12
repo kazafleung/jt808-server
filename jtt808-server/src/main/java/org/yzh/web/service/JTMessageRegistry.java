@@ -6,6 +6,8 @@ import org.springframework.context.annotation.ClassPathScanningCandidateComponen
 import org.springframework.core.type.filter.AnnotationTypeFilter;
 import org.springframework.stereotype.Component;
 import org.yzh.protocol.basics.JTMessage;
+import org.yzh.protocol.commons.JT808;
+import org.yzh.protocol.t808.*;
 import org.yzh.web.config.JTProperties;
 
 import java.util.Collections;
@@ -25,6 +27,26 @@ public class JTMessageRegistry {
 
     /** messageId (int) → concrete JTMessage subclass */
     private final Map<Integer, Class<? extends JTMessage>> registry;
+
+    /**
+     * Maps a downlink command message ID to the expected uplink response class.
+     * Commands not listed here default to {@link T0001} (terminal general response).
+     */
+    private static final Map<Integer, Class<?>> RESPONSE_MAP;
+
+    static {
+        Map<Integer, Class<?>> m = new HashMap<>();
+        m.put(JT808.查询终端参数,         T0104.class);   // 0x8104
+        m.put(JT808.查询指定终端参数,     T0104.class);   // 0x8106
+        m.put(JT808.查询终端属性,         T0107.class);   // 0x8107
+        m.put(JT808.位置信息查询,         T0201_0500.class); // 0x8201
+        m.put(JT808.车辆控制,             T0201_0500.class); // 0x8500
+        m.put(JT808.查询区域或线路数据,   T0608.class);   // 0x8608
+        m.put(JT808.上报驾驶员身份信息请求, T0702.class); // 0x8702
+        m.put(JT808.摄像头立即拍摄命令,   T0805.class);  // 0x8801
+        m.put(JT808.存储多媒体数据检索,   T0802.class);  // 0x8802
+        RESPONSE_MAP = Collections.unmodifiableMap(m);
+    }
 
     @SuppressWarnings("unchecked")
     public JTMessageRegistry(JTProperties jtProperties) {
@@ -66,5 +88,13 @@ public class JTMessageRegistry {
      */
     public Class<? extends JTMessage> resolve(int messageId) {
         return registry.getOrDefault(messageId, JTMessage.class);
+    }
+
+    /**
+     * Returns the expected response class for a given downlink command message ID.
+     * Defaults to {@link T0001} (terminal general response) for unlisted commands.
+     */
+    public Class<?> resolveResponse(int messageId) {
+        return RESPONSE_MAP.getOrDefault(messageId, T0001.class);
     }
 }

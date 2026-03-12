@@ -212,8 +212,8 @@ public class CommandDispatchService implements SmartLifecycle {
             }
 
             String responseClassName = command.getResponseClass();
-            if (responseClassName == null || responseClassName.isBlank()) {
-                // Fire-and-forget — no reply expected from device
+            if (command.isNotify()) {
+                // Explicit fire-and-forget — no reply expected from device
                 session.notify(request)
                         .timeout(Duration.ofSeconds(DEVICE_RESPONSE_TIMEOUT_SECONDS))
                         .subscribe(
@@ -221,7 +221,15 @@ public class CommandDispatchService implements SmartLifecycle {
                                 (Throwable err) -> markFailed(command.getId(), err.getMessage())
                         );
             } else {
-                Class<?> respClass = resolveClass(responseClassName);
+                // Auto-resolve response class from registry, or use explicit override
+                Class<?> respClass;
+                if (responseClassName != null && !responseClassName.isBlank()) {
+                    respClass = resolveClass(responseClassName);
+                } else if (command.getMessageId() != null) {
+                    respClass = messageRegistry.resolveResponse(parseMessageId(command.getMessageId()));
+                } else {
+                    respClass = org.yzh.protocol.t808.T0001.class;
+                }
                 dispatchRequest(session, request, respClass, command.getId());
             }
         } catch (Exception e) {

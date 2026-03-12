@@ -52,10 +52,16 @@ public class DeviceCommand {
 
     /**
      * Fully qualified class name of the expected response type.
-     * Set to null or omit for fire-and-forget (notify-only) commands.
-     * Example: {@code "org.yzh.protocol.t808.T0201_0500"}
+     * Optional — automatically resolved from the protocol registry based on {@code messageId}.
+     * Only set this to override the default (e.g. for custom/vendor-specific message IDs).
      */
     private String responseClass;
+
+    /**
+     * When {@code true}, the command is sent as fire-and-forget (no response expected from device).
+     * Defaults to {@code false}.
+     */
+    private boolean notify;
 
     /**
      * JSON field map representing the JTMessage request body.
