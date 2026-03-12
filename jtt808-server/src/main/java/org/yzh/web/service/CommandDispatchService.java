@@ -45,13 +45,14 @@ import java.util.Map;
  * <pre>
  * {
  *   "clientId":      "013912345678",
- *   "messageClass":  "org.yzh.protocol.t808.T8201",
- *   "responseClass": "org.yzh.protocol.t808.T0201_0500",  // omit for fire-and-forget
+ *   "messageId":     "T8300",              // T-prefix hex — always sufficient
+ *   "responseClass": "org.yzh.protocol.t808.T0001",  // omit for fire-and-forget
  *   "payload":       { ... JTMessage fields ... },
  *   "status":        "pending",
  *   "createdAt":     ISODate("...")
  * }
  * </pre>
+ * {@code messageClass} may still be set to override the auto-resolved class.
  */
 @Slf4j
 @Service
@@ -73,6 +74,7 @@ public class CommandDispatchService implements SmartLifecycle {
     private final MongoTemplate mongoTemplate;
     private final SessionManager sessionManager;
     private final ObjectMapper objectMapper;
+    private final JTMessageRegistry messageRegistry;
 
     private volatile boolean running = false;
     private volatile MongoCursor<?> activeCursor;
@@ -192,9 +194,22 @@ public class CommandDispatchService implements SmartLifecycle {
         }
 
         try {
-            Class<? extends JTMessage> msgClass = resolveClass(command.getMessageClass());
-            JTMessage request = objectMapper.convertValue(command.getPayload(), msgClass);
+            // Resolve class: explicit messageClass override > registry lookup by messageId > JTMessage base
+            Class<? extends JTMessage> msgClass;
+            String messageClassName = command.getMessageClass();
+            if (messageClassName != null && !messageClassName.isBlank()) {
+                msgClass = resolveClass(messageClassName);
+            } else if (command.getMessageId() != null) {
+                msgClass = messageRegistry.resolve(parseMessageId(command.getMessageId()));
+            } else {
+                msgClass = JTMessage.class;
+            }
+            JTMessage request = objectMapper.convertValue(
+                    command.getPayload() != null ? command.getPayload() : Map.of(), msgClass);
             request.setClientId(clientId);
+            if (command.getMessageId() != null) {
+                request.setMessageId(parseMessageId(command.getMessageId()));
+            }
 
             String responseClassName = command.getResponseClass();
             if (responseClassName == null || responseClassName.isBlank()) {
@@ -256,6 +271,20 @@ public class CommandDispatchService implements SmartLifecycle {
     // -------------------------------------------------------------------------
     // Class resolution (security: restricted to protocol packages)
     // -------------------------------------------------------------------------
+
+    /**
+     * Parses a JT808 message ID string to its integer value.
+     * Accepted formats: {@code "T8104"}, {@code "8104"}, {@code "0x8104"} — all hex.
+     */
+    private int parseMessageId(String value) {
+        String hex = value.trim();
+        if (hex.startsWith("0x") || hex.startsWith("0X")) {
+            hex = hex.substring(2);
+        } else if (hex.startsWith("T") || hex.startsWith("t")) {
+            hex = hex.substring(1);
+        }
+        return Integer.parseUnsignedInt(hex, 16);
+    }
 
     @SuppressWarnings("unchecked")
     private <T> Class<T> resolveClass(String className) throws ClassNotFoundException {

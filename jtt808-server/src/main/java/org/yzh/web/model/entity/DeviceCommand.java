@@ -38,9 +38,17 @@ public class DeviceCommand {
     /**
      * Fully qualified class name of the JTMessage subclass to send.
      * Must be in the {@code org.yzh.protocol} package tree.
-     * Example: {@code "org.yzh.protocol.t808.T8201"}
+     * Optional — if omitted, {@code org.yzh.protocol.basics.JTMessage} is used.
+     * Example: {@code "org.yzh.protocol.t808.T8300"}
      */
     private String messageClass;
+
+    /**
+     * JT808 message ID in any of these formats: {@code "T8104"}, {@code "8104"}, {@code "0x8104"}.
+     * All are treated as hexadecimal. Required when {@code messageClass} is omitted or is the base
+     * {@code JTMessage} type. Overrides any messageId already in {@code payload}.
+     */
+    private String messageId;
 
     /**
      * Fully qualified class name of the expected response type.
