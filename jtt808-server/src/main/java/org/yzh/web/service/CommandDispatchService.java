@@ -1,23 +1,27 @@
 package org.yzh.web.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.mongodb.client.MongoCursor;
+import com.mongodb.client.model.Aggregates;
+import com.mongodb.client.model.Filters;
+import com.mongodb.client.model.changestream.ChangeStreamDocument;
+import com.mongodb.client.model.changestream.FullDocument;
 import io.github.yezhihao.netmc.session.Session;
 import io.github.yezhihao.netmc.session.SessionManager;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.bson.Document;
+import org.bson.conversions.Bson;
 import org.springframework.context.SmartLifecycle;
 import org.springframework.data.mongodb.core.FindAndModifyOptions;
 import org.springframework.data.mongodb.core.MongoTemplate;
-import org.springframework.data.mongodb.core.aggregation.Aggregation;
-import org.springframework.data.mongodb.core.aggregation.ChangeStreamOptions;
-import org.springframework.data.mongodb.core.messaging.ChangeStreamEvent;
 import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.data.mongodb.core.query.Update;
-import org.springframework.data.util.CloseableIterator;
 import org.springframework.stereotype.Service;
 import org.yzh.protocol.basics.JTMessage;
 import org.yzh.web.model.entity.DeviceCommand;
+import reactor.core.publisher.Mono;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
@@ -71,7 +75,7 @@ public class CommandDispatchService implements SmartLifecycle {
     private final ObjectMapper objectMapper;
 
     private volatile boolean running = false;
-    private volatile CloseableIterator<?> activeCursor;
+    private volatile MongoCursor<?> activeCursor;
     private Thread dispatchThread;
 
     // -------------------------------------------------------------------------
@@ -90,7 +94,7 @@ public class CommandDispatchService implements SmartLifecycle {
     @Override
     public void stop() {
         running = false;
-        CloseableIterator<?> cursor = activeCursor;
+        MongoCursor<?> cursor = activeCursor;
         if (cursor != null) {
             try {
                 cursor.close();
@@ -116,9 +120,6 @@ public class CommandDispatchService implements SmartLifecycle {
         while (running) {
             try {
                 openAndDrain();
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                break;
             } catch (Exception e) {
                 if (running) {
                     log.error("Change stream error on '{}', reconnecting in {}ms", COLLECTION, RECONNECT_DELAY_MS, e);
@@ -134,25 +135,28 @@ public class CommandDispatchService implements SmartLifecycle {
     }
 
     private void openAndDrain() {
-        ChangeStreamOptions options = ChangeStreamOptions.builder()
-                .filter(Aggregation.newAggregation(
-                        Aggregation.match(
-                                Criteria.where("operationType").is("insert")
-                                        .and("fullDocument.status").is("pending")
-                        )
+        List<Bson> pipeline = List.of(
+                Aggregates.match(Filters.and(
+                        Filters.eq("operationType", "insert"),
+                        Filters.eq("fullDocument.status", "pending")
                 ))
-                .build();
+        );
 
-        try (CloseableIterator<ChangeStreamEvent<DeviceCommand>> cursor =
-                     mongoTemplate.changeStream(COLLECTION, options, DeviceCommand.class)) {
+        try (MongoCursor<ChangeStreamDocument<Document>> cursor =
+                     mongoTemplate.getCollection(COLLECTION)
+                             .watch(pipeline)
+                             .fullDocument(FullDocument.DEFAULT)
+                             .iterator()) {
 
             activeCursor = cursor;
             log.info("Change stream cursor opened on '{}'", COLLECTION);
 
             while (running && cursor.hasNext()) {
-                ChangeStreamEvent<DeviceCommand> event = cursor.next();
-                DeviceCommand command = event.getBody();
-                if (command != null) {
+                ChangeStreamDocument<Document> event = cursor.next();
+                Document fullDoc = event.getFullDocument();
+                if (fullDoc != null) {
+                    DeviceCommand command = mongoTemplate.getConverter()
+                            .read(DeviceCommand.class, fullDoc);
                     processCommand(command);
                 }
             }
@@ -199,7 +203,7 @@ public class CommandDispatchService implements SmartLifecycle {
                         .timeout(Duration.ofSeconds(DEVICE_RESPONSE_TIMEOUT_SECONDS))
                         .subscribe(
                                 v -> markDone(command.getId(), null),
-                                err -> markFailed(command.getId(), err.getMessage())
+                                (Throwable err) -> markFailed(command.getId(), err.getMessage())
                         );
             } else {
                 Class<?> respClass = resolveClass(responseClassName);
@@ -213,8 +217,8 @@ public class CommandDispatchService implements SmartLifecycle {
 
     @SuppressWarnings({"unchecked", "rawtypes"})
     private void dispatchRequest(Session session, JTMessage request, Class<?> respClass, String commandId) {
-        session.request(request, (Class) respClass)
-                .timeout(Duration.ofSeconds(DEVICE_RESPONSE_TIMEOUT_SECONDS))
+        Mono<Object> mono = (Mono) session.request(request, (Class) respClass);
+        mono.timeout(Duration.ofSeconds(DEVICE_RESPONSE_TIMEOUT_SECONDS))
                 .subscribe(
                         resp -> {
                             Map<String, Object> resultMap = objectMapper.convertValue(resp, Map.class);
