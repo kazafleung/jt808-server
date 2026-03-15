@@ -7,7 +7,9 @@ import org.springframework.core.type.filter.AnnotationTypeFilter;
 import org.springframework.stereotype.Component;
 import org.yzh.protocol.basics.JTMessage;
 import org.yzh.protocol.commons.JT808;
+import org.yzh.protocol.commons.JT1078;
 import org.yzh.protocol.t808.*;
+import org.yzh.protocol.t1078.*;
 import org.yzh.web.config.JTProperties;
 
 import java.util.Collections;
@@ -45,6 +47,10 @@ public class JTMessageRegistry {
         m.put(JT808.上报驾驶员身份信息请求, T0702.class); // 0x8702
         m.put(JT808.摄像头立即拍摄命令,   T0805.class);  // 0x8801
         m.put(JT808.存储多媒体数据检索,   T0802.class);  // 0x8802
+        // JT1078
+        m.put(JT1078.查询终端音视频属性,   T1003.class);  // 0x9003
+        m.put(JT1078.平台下发远程录像回放请求, T1205.class); // 0x9201
+        m.put(JT1078.查询资源列表,     T1205.class);  // 0x9205
         RESPONSE_MAP = Collections.unmodifiableMap(m);
     }
 

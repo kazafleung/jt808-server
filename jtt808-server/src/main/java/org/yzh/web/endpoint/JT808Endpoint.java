@@ -126,6 +126,7 @@ public class JT808Endpoint {
     @Mapping(types = 位置信息汇报, desc = "位置信息汇报")
     public void T0200(List<T0200> list) {
         locationService.saveBatch(list);
+        deviceService.updateLatestLocations(list);
     }
 
     @Mapping(types = 定位数据批量上传, desc = "定位数据批量上传")
@@ -133,6 +134,7 @@ public class JT808Endpoint {
         if (message.getItems() != null) {
             message.getItems().forEach(item -> item.setClientId(message.getClientId()));
             locationService.saveBatch(message.getItems());
+            deviceService.updateLatestLocations(message.getItems());
         }
     }
 

@@ -6,7 +6,6 @@ import lombok.experimental.Accessors;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
-import org.yzh.protocol.t808.T0200;
 
 import java.time.LocalDateTime;
 import java.util.Objects;
@@ -41,10 +40,10 @@ public class Device {
     @Schema(description = "首次注册时间")
     private LocalDateTime registeredAt;
 
-    @Schema(description = "实时状态")
-    private T0200 location;
+    @Schema(description = "最新位置")
+    private LocationRecord location;
 
-    public void updateLocation(T0200 location) {
+    public void updateLocation(LocationRecord location) {
         if (this.location == null) {
             this.location = location;
         } else if (this.location.getDeviceTime().isBefore(location.getDeviceTime())) {

@@ -3,8 +3,11 @@ package org.yzh.web.model.entity;
 import lombok.Data;
 import lombok.experimental.Accessors;
 import org.springframework.data.annotation.Id;
+import org.springframework.data.mongodb.core.geo.GeoJsonPoint;
 import org.springframework.data.mongodb.core.index.CompoundIndex;
 import org.springframework.data.mongodb.core.index.CompoundIndexes;
+import org.springframework.data.mongodb.core.index.GeoSpatialIndexed;
+import org.springframework.data.mongodb.core.index.GeoSpatialIndexType;
 import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
 import org.yzh.protocol.t808.T0200;
@@ -43,17 +46,9 @@ public class LocationRecord {
     /** 状态标志（解码后） */
     private StatusBits status;
 
-    /** 纬度（原始值，实际值 = latitude / 1000000.0） */
-    private int latitude;
-
-    /** 经度（原始值，实际值 = longitude / 1000000.0） */
-    private int longitude;
-
-    /** 纬度（度，保留6位小数） */
-    private double lat;
-
-    /** 经度（度，保留6位小数） */
-    private double lng;
+    /** GeoJSON Point (coordinates: [longitude, latitude]) — supports 2dsphere geo queries */
+    @GeoSpatialIndexed(type = GeoSpatialIndexType.GEO_2DSPHERE)
+    private GeoJsonPoint location;
 
     /** 高程（米） */
     private int altitude;
@@ -74,10 +69,7 @@ public class LocationRecord {
                 .setReceivedAt(LocalDateTime.now())
                 .setWarnBit(msg.getWarnBit())
                 .setStatus(StatusBits.from(msg.getStatusBit()))
-                .setLatitude(msg.getLatitude())
-                .setLongitude(msg.getLongitude())
-                .setLat(msg.getLat())
-                .setLng(msg.getLng())
+                .setLocation(new GeoJsonPoint(msg.getLng(), msg.getLat()))
                 .setAltitude(msg.getAltitude())
                 .setSpeed(msg.getSpeed())
                 .setDirection(msg.getDirection())

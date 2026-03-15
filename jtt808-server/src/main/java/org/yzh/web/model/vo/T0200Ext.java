@@ -4,6 +4,7 @@ import io.github.yezhihao.netmc.session.Session;
 import org.yzh.protocol.commons.transform.attribute.*;
 import org.yzh.protocol.t808.T0200;
 import org.yzh.web.model.entity.Device;
+import org.yzh.web.model.entity.LocationRecord;
 import org.yzh.web.model.enums.SessionKey;
 
 import java.util.ArrayList;
@@ -26,7 +27,7 @@ public class T0200Ext {
 
 
         Device device = session.getAttribute(SessionKey.Device);
-        if (device != null) device.updateLocation(t);
+        if (device != null) device.updateLocation(LocationRecord.from(t));
     }
 
 
