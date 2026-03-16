@@ -23,7 +23,9 @@ import org.yzh.protocol.t808.T0801;
 import org.yzh.web.config.JTProperties;
 import org.yzh.web.config.OciProperties;
 import org.yzh.web.model.entity.Device;
+import org.yzh.web.model.entity.MediaRecord;
 import org.yzh.web.model.enums.SessionKey;
+import org.yzh.web.repository.MediaRecordRepository;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -37,6 +39,9 @@ import java.nio.file.Files;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
 
@@ -58,6 +63,9 @@ public class FileService {
 
     @Resource
     private OciProperties ociProperties;
+
+    @Resource
+    private MediaRecordRepository mediaRecordRepository;
 
     private static final Comparator<long[]> comparator = Comparator.comparingLong((long[] a) -> a[0]).thenComparingLong(a -> a[1]);
 
@@ -215,6 +223,8 @@ public class FileService {
         File dir = new File(jtProperties.getT0801().getPath() + '/' + deviceId);
         dir.mkdirs();
 
+        String objectStorePath = deviceId + "/" + filename;
+
         ByteBuf packet = message.getPacket();
         FileOutputStream fos = null;
         try {
@@ -228,13 +238,31 @@ public class FileService {
                 PutObjectRequest putObjectRequest = PutObjectRequest.builder()
                         .bucketName(ociProperties.getBucket())
                         .namespaceName(ociProperties.getNamespace())
-                        .objectName(deviceId + "/" + filename.toString())
+                        .objectName(objectStorePath)
                         .putObjectBody(fis)
                         .build();
                 objectStorage.putObject(putObjectRequest);
             } catch (Exception e) {
                 log.error("OCI Upload Failed", e);
             }
+
+            // Convert deviceTime from CST (UTC+8) to UTC
+            LocalDateTime deviceTimeUtc = location.getDeviceTime() == null ? null
+                    : location.getDeviceTime().atZone(ZoneId.of("Asia/Shanghai")).withZoneSameInstant(ZoneOffset.UTC).toLocalDateTime();
+
+            MediaRecord record = new MediaRecord()
+                    .setClientId(message.getClientId())
+                    .setDeviceId(deviceId)
+                    .setMediaId(message.getId())
+                    .setChannelId(message.getChannelId())
+                    .setMediaType(message.getType())
+                    .setFormat(message.getFormat())
+                    .setEvent(message.getEvent())
+                    .setDeviceTime(deviceTimeUtc)
+                    .setReceivedAt(LocalDateTime.now(ZoneOffset.UTC))
+                    .setObjectStorePath(objectStorePath);
+            mediaRecordRepository.save(record);
+
             return true;
         } catch (IOException e) {
             log.error("多媒体数据保存失败", e);
