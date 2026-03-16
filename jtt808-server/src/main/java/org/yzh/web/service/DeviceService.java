@@ -77,7 +77,7 @@ public class DeviceService {
             Query q = Query.query(Criteria.where("mobileNo").is(clientId)
                     .orOperator(
                             Criteria.where("location").isNull(),
-                            Criteria.where("location.deviceTime").lt(t.getDeviceTime())
+                            Criteria.where("location.deviceTime").lt(record.getDeviceTime())
                     ));
             ops.updateOne(q, Update.update("location", record));
         });

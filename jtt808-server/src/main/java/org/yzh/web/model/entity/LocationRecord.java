@@ -13,6 +13,8 @@ import org.springframework.data.mongodb.core.mapping.Document;
 import org.yzh.protocol.t808.T0200;
 
 import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.util.Map;
 
 /**
@@ -63,10 +65,13 @@ public class LocationRecord {
     private Map<Integer, Object> attributes;
 
     public static LocationRecord from(T0200 msg) {
+        // deviceTime from JT808 is always CST (UTC+8); convert to UTC for storage
+        LocalDateTime deviceTimeUtc = msg.getDeviceTime() == null ? null
+                : msg.getDeviceTime().atZone(ZoneId.of("Asia/Hong_Kong")).withZoneSameInstant(ZoneOffset.UTC).toLocalDateTime();
         return new LocationRecord()
                 .setClientId(msg.getClientId())
-                .setDeviceTime(msg.getDeviceTime())
-                .setReceivedAt(LocalDateTime.now())
+                .setDeviceTime(deviceTimeUtc)
+                .setReceivedAt(LocalDateTime.now(ZoneOffset.UTC))
                 .setWarnBit(msg.getWarnBit())
                 .setStatus(StatusBits.from(msg.getStatusBit()))
                 .setLocation(new GeoJsonPoint(msg.getLng(), msg.getLat()))

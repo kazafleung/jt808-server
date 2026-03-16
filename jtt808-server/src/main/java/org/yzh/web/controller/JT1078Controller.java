@@ -13,6 +13,7 @@ import org.yzh.protocol.t1078.*;
 import org.yzh.protocol.t808.T0001;
 import org.yzh.web.config.JTProperties;
 import org.yzh.web.endpoint.MessageManager;
+import org.yzh.web.service.StreamSessionService;
 import reactor.core.publisher.Mono;
 
 @RestController
@@ -24,6 +25,8 @@ public class JT1078Controller {
 
     private final JTProperties jtProperties;
 
+    private final StreamSessionService streamSessionService;
+
     @Operation(summary = "9003 查询终端音视频属性")
     @PostMapping("9003")
     public Mono<T1003> T9003(@RequestBody JTMessage request) {
@@ -33,13 +36,15 @@ public class JT1078Controller {
     @Operation(summary = "9101 实时音视频传输请求")
     @PostMapping("9101")
     public Mono<T0001> T9101(@RequestBody T9101 request) {
-        return messageManager.request(request, T0001.class);
+        return messageManager.request(request, T0001.class)
+                .doOnSuccess(resp -> streamSessionService.startStream(request));
     }
 
     @Operation(summary = "9102 音视频实时传输控制")
     @PostMapping("9102")
     public Mono<T0001> T9102(@RequestBody T9102 request) {
-        return messageManager.request(request, T0001.class);
+        return messageManager.request(request, T0001.class)
+                .doOnSuccess(resp -> streamSessionService.controlStream(request));
     }
 
     @Operation(summary = "9201 平台下发远程录像回放请求")
