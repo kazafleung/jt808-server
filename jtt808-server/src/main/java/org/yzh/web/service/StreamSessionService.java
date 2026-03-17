@@ -30,6 +30,7 @@ public class StreamSessionService {
 
         session.setClientId(request.getClientId())
                 .setChannelNo(request.getChannelNo())
+                .setTag(StreamSession.buildTag(request.getClientId(), request.getChannelNo()))
                 .setMediaType(request.getMediaType())
                 .setStreamType(request.getStreamType())
                 .setServerIp(request.getIp())
@@ -47,11 +48,11 @@ public class StreamSessionService {
     /**
      * Called after a T9102 control command is successfully sent.
      * Updates status based on the command field:
-     *   0 = close → STOPPED
-     *   1 = switch stream → update streamType only (stays STREAMING/REQUESTED)
-     *   2 = pause → PAUSED
-     *   3 = resume → STREAMING
-     *   4 = close talk → STOPPED
+     * 0 = close → STOPPED
+     * 1 = switch stream → update streamType only (stays STREAMING/REQUESTED)
+     * 2 = pause → PAUSED
+     * 3 = resume → STREAMING
+     * 4 = close talk → STOPPED
      */
     public Optional<StreamSession> controlStream(T9102 request) {
         return streamSessionRepository

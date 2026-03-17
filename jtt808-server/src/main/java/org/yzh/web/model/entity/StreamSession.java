@@ -6,6 +6,7 @@ import lombok.experimental.Accessors;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.index.CompoundIndex;
 import org.springframework.data.mongodb.core.index.CompoundIndexes;
+import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
 
 import java.time.LocalDateTime;
@@ -27,6 +28,10 @@ public class StreamSession {
 
     @Id
     private String id;
+
+    /** 媒体服务器标识: 12位clientId(左补0) + "-" + channelNo */
+    @Indexed(unique = true)
+    private String tag;
 
     @Schema(description = "终端手机号")
     private String clientId;
@@ -72,5 +77,9 @@ public class StreamSession {
     public StreamSession markUpdated() {
         this.updatedAt = LocalDateTime.now(ZoneOffset.UTC);
         return this;
+    }
+
+    public static String buildTag(String clientId, int channelNo) {
+        return String.format("%012d", Long.parseLong(clientId)) + "-" + channelNo;
     }
 }
