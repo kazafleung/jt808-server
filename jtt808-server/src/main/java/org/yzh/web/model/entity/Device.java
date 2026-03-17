@@ -40,14 +40,14 @@ public class Device {
     @Schema(description = "首次注册时间")
     private LocalDateTime registeredAt;
 
-    @Schema(description = "最新位置")
-    private DeviceStatus location;
+    @Schema(description = "最新状态")
+    private DeviceStatus status;
 
-    public void updateStatus(DeviceStatus location) {
-        if (this.location == null) {
-            this.location = location;
-        } else if (this.location.getDeviceTime().isBefore(location.getDeviceTime())) {
-            this.location = location;
+    public void updateStatus(DeviceStatus status) {
+        if (this.status == null) {
+            this.status = status;
+        } else if (this.status.getDeviceTime().isBefore(status.getDeviceTime())) {
+            this.status = status;
         }
     }
 
