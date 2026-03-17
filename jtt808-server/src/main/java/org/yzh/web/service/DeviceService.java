@@ -10,7 +10,7 @@ import org.springframework.data.mongodb.core.query.Update;
 import org.springframework.stereotype.Service;
 import org.yzh.protocol.t808.T0200;
 import org.yzh.web.model.entity.Device;
-import org.yzh.web.model.entity.LocationRecord;
+import org.yzh.web.model.entity.DeviceStatus;
 import org.yzh.web.repository.DeviceRepository;
 
 import java.time.LocalDateTime;
@@ -48,7 +48,8 @@ public class DeviceService {
                 .orElseGet(() -> {
                     device.setRegisteredAt(LocalDateTime.now());
                     Device saved = deviceRepository.save(device);
-                    log.info("New device registered: mobileNo={}, deviceId={}", saved.getMobileNo(), saved.getDeviceId());
+                    log.info("New device registered: mobileNo={}, deviceId={}", saved.getMobileNo(),
+                            saved.getDeviceId());
                     return saved;
                 });
     }
@@ -58,28 +59,29 @@ public class DeviceService {
      * Only writes if the incoming deviceTime is newer than what is stored.
      */
     public void updateLatestLocations(List<T0200> list) {
-        if (list == null || list.isEmpty()) return;
+        if (list == null || list.isEmpty())
+            return;
 
         // Deduplicate: keep only the newest T0200 per clientId
         Map<String, T0200> latestByDevice = new HashMap<>();
         for (T0200 t : list) {
             String clientId = t.getClientId();
-            if (clientId == null || t.getDeviceTime() == null) continue;
-            latestByDevice.merge(clientId, t, (a, b) ->
-                    a.getDeviceTime().isBefore(b.getDeviceTime()) ? b : a);
+            if (clientId == null || t.getDeviceTime() == null)
+                continue;
+            latestByDevice.merge(clientId, t, (a, b) -> a.getDeviceTime().isBefore(b.getDeviceTime()) ? b : a);
         }
 
-        if (latestByDevice.isEmpty()) return;
+        if (latestByDevice.isEmpty())
+            return;
 
         BulkOperations ops = mongoTemplate.bulkOps(BulkOperations.BulkMode.UNORDERED, Device.class);
         latestByDevice.forEach((clientId, t) -> {
-            LocationRecord record = LocationRecord.from(t);
+            DeviceStatus record = DeviceStatus.from(t);
             Query q = Query.query(Criteria.where("mobileNo").is(clientId)
                     .orOperator(
-                            Criteria.where("location").isNull(),
-                            Criteria.where("location.deviceTime").lt(record.getDeviceTime())
-                    ));
-            ops.updateOne(q, Update.update("location", record));
+                            Criteria.where("status").isNull(),
+                            Criteria.where("status.deviceTime").lt(record.getDeviceTime())));
+            ops.updateOne(q, Update.update("status", record));
         });
         ops.execute();
     }
