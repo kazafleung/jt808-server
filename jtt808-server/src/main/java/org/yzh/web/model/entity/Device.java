@@ -41,9 +41,9 @@ public class Device {
     private LocalDateTime registeredAt;
 
     @Schema(description = "最新位置")
-    private LocationRecord location;
+    private DeviceStatus location;
 
-    public void updateLocation(LocationRecord location) {
+    public void updateStatus(DeviceStatus location) {
         if (this.location == null) {
             this.location = location;
         } else if (this.location.getDeviceTime().isBefore(location.getDeviceTime())) {

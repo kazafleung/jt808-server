@@ -42,14 +42,11 @@ public class LocationRecord {
         /** 服务器接收时间 */
         private LocalDateTime receivedAt;
 
-        /** 报警标志 */
+        /** 报警标志（原始值） */
         private int warnBit;
 
-        /** 报警标志（解码后） */
-        private WarnBits warn;
-
-        /** 状态标志（解码后） */
-        private StatusBits status;
+        /** 状态标志（原始值） */
+        private int statusBit;
 
         /**
          * GeoJSON Point (coordinates: [longitude, latitude]) — supports 2dsphere geo
@@ -80,8 +77,7 @@ public class LocationRecord {
                                 .setDeviceTime(deviceTimeUtc)
                                 .setReceivedAt(LocalDateTime.now(ZoneOffset.UTC))
                                 .setWarnBit(msg.getWarnBit())
-                                .setWarn(WarnBits.from(msg.getWarnBit()))
-                                .setStatus(StatusBits.from(msg.getStatusBit()))
+                                .setStatusBit(msg.getStatusBit())
                                 .setLocation(new GeoJsonPoint(msg.getLng(), msg.getLat()))
                                 .setAltitude(msg.getAltitude())
                                 .setSpeed(msg.getSpeed())

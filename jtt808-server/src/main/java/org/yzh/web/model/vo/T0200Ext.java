@@ -4,7 +4,7 @@ import io.github.yezhihao.netmc.session.Session;
 import org.yzh.protocol.commons.transform.attribute.*;
 import org.yzh.protocol.t808.T0200;
 import org.yzh.web.model.entity.Device;
-import org.yzh.web.model.entity.LocationRecord;
+import org.yzh.web.model.entity.DeviceStatus;
 import org.yzh.web.model.enums.SessionKey;
 
 import java.util.ArrayList;
@@ -14,7 +14,7 @@ import java.util.Map;
 
 /**
  * @author yezhihao
- * https://gitee.com/yezhihao/jt808-server
+ *         https://gitee.com/yezhihao/jt808-server
  */
 public class T0200Ext {
 
@@ -25,11 +25,10 @@ public class T0200Ext {
         Session session = t.getSession();
         this.alarms = getAlarms(t);
 
-
         Device device = session.getAttribute(SessionKey.Device);
-        if (device != null) device.updateLocation(LocationRecord.from(t));
+        if (device != null)
+            device.updateStatus(DeviceStatus.from(t));
     }
-
 
     private List<Alarm> getAlarms(T0200 t) {
         Map<Integer, Object> attributes = t.getAttributes();
@@ -70,7 +69,6 @@ public class T0200Ext {
         }
         return Collections.emptyList();
     }
-
 
     public boolean updated() {
         return updated || !(updated = true);
