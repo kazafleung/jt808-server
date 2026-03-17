@@ -223,7 +223,7 @@ public class FileService {
         File dir = new File(jtProperties.getT0801().getPath() + '/' + deviceId);
         dir.mkdirs();
 
-        String objectStorePath = deviceId + "/" + filename;
+        String objectStorePath = message.getClientId() + "/" + filename;
 
         ByteBuf packet = message.getPacket();
         FileOutputStream fos = null;
