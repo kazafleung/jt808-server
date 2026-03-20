@@ -3,6 +3,7 @@ package org.yzh.web.model.entity;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.experimental.Accessors;
+import org.springframework.data.mongodb.core.mapping.Field;
 import org.yzh.protocol.t808.T0200;
 
 /**
@@ -20,9 +21,11 @@ import org.yzh.protocol.t808.T0200;
 public class DeviceStatus extends LocationRecord {
 
     /** 报警标志（按位解码） */
+    @Field("w")
     private WarnBits warn;
 
     /** 状态标志（按位解码） */
+    @Field("s")
     private StatusBits status;
 
     public static DeviceStatus from(T0200 msg) {

@@ -33,15 +33,18 @@ import java.util.Map;
  * <p>
  * When a document with {@code status: "pending"} is inserted, this service:
  * <ol>
- *   <li>Checks whether the target device is connected to <em>this</em> instance.</li>
- *   <li>Atomically claims the command ({@code pending → processing}) to prevent
- *       double execution across multiple running instances.</li>
- *   <li>Deserializes the payload and dispatches the JT808 command over the
- *       device's Netty session.</li>
- *   <li>Writes the result or error back to the document ({@code done / failed}).</li>
+ * <li>Checks whether the target device is connected to <em>this</em>
+ * instance.</li>
+ * <li>Atomically claims the command ({@code pending → processing}) to prevent
+ * double execution across multiple running instances.</li>
+ * <li>Deserializes the payload and dispatches the JT808 command over the
+ * device's Netty session.</li>
+ * <li>Writes the result or error back to the document
+ * ({@code done / failed}).</li>
  * </ol>
  * <p>
  * Insert schema expected from the calling application:
+ * 
  * <pre>
  * {
  *   "clientId":      "013912345678",
@@ -52,6 +55,7 @@ import java.util.Map;
  *   "createdAt":     ISODate("...")
  * }
  * </pre>
+ * 
  * {@code messageClass} may still be set to override the auto-resolved class.
  */
 @Slf4j
@@ -59,13 +63,15 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class CommandDispatchService implements SmartLifecycle {
 
-    /** Only classes within these packages may be instantiated from command documents. */
+    /**
+     * Only classes within these packages may be instantiated from command
+     * documents.
+     */
     private static final List<String> ALLOWED_PACKAGES = List.of(
             "org.yzh.protocol.t808.",
             "org.yzh.protocol.t1078.",
             "org.yzh.protocol.jsatl12.",
-            "org.yzh.protocol.basics."
-    );
+            "org.yzh.protocol.basics.");
 
     private static final String COLLECTION = "device_commands";
     private static final int DEVICE_RESPONSE_TIMEOUT_SECONDS = 10;
@@ -140,15 +146,12 @@ public class CommandDispatchService implements SmartLifecycle {
         List<Bson> pipeline = List.of(
                 Aggregates.match(Filters.and(
                         Filters.eq("operationType", "insert"),
-                        Filters.eq("fullDocument.status", "pending")
-                ))
-        );
+                        Filters.eq("fullDocument.st", "pending"))));
 
-        try (MongoCursor<ChangeStreamDocument<Document>> cursor =
-                     mongoTemplate.getCollection(COLLECTION)
-                             .watch(pipeline)
-                             .fullDocument(FullDocument.DEFAULT)
-                             .iterator()) {
+        try (MongoCursor<ChangeStreamDocument<Document>> cursor = mongoTemplate.getCollection(COLLECTION)
+                .watch(pipeline)
+                .fullDocument(FullDocument.DEFAULT)
+                .iterator()) {
 
             activeCursor = cursor;
             log.info("Change stream cursor opened on '{}'", COLLECTION);
@@ -186,15 +189,15 @@ public class CommandDispatchService implements SmartLifecycle {
                         .and("status").is("pending")),
                 new Update().set("status", "processing"),
                 FindAndModifyOptions.options().returnNew(false),
-                DeviceCommand.class
-        );
+                DeviceCommand.class);
         if (claimed == null) {
             // Another instance claimed it first (race condition guard)
             return;
         }
 
         try {
-            // Resolve class: explicit messageClass override > registry lookup by messageId > JTMessage base
+            // Resolve class: explicit messageClass override > registry lookup by messageId
+            // > JTMessage base
             Class<? extends JTMessage> msgClass;
             String messageClassName = command.getMessageClass();
             if (messageClassName != null && !messageClassName.isBlank()) {
@@ -218,8 +221,7 @@ public class CommandDispatchService implements SmartLifecycle {
                         .timeout(Duration.ofSeconds(DEVICE_RESPONSE_TIMEOUT_SECONDS))
                         .subscribe(
                                 v -> markDone(command.getId(), null),
-                                (Throwable err) -> markFailed(command.getId(), err.getMessage())
-                        );
+                                (Throwable err) -> markFailed(command.getId(), err.getMessage()));
             } else {
                 // Auto-resolve response class from registry, or use explicit override
                 Class<?> respClass;
@@ -238,7 +240,7 @@ public class CommandDispatchService implements SmartLifecycle {
         }
     }
 
-    @SuppressWarnings({"unchecked", "rawtypes"})
+    @SuppressWarnings({ "unchecked", "rawtypes" })
     private void dispatchRequest(Session session, JTMessage request, Class<?> respClass, String commandId) {
         Mono<Object> mono = (Mono) session.request(request, (Class) respClass);
         mono.timeout(Duration.ofSeconds(DEVICE_RESPONSE_TIMEOUT_SECONDS))
@@ -247,8 +249,7 @@ public class CommandDispatchService implements SmartLifecycle {
                             Map<String, Object> resultMap = objectMapper.convertValue(resp, Map.class);
                             markDone(commandId, resultMap);
                         },
-                        err -> markFailed(commandId, err.getMessage())
-                );
+                        err -> markFailed(commandId, err.getMessage()));
     }
 
     // -------------------------------------------------------------------------
@@ -272,8 +273,7 @@ public class CommandDispatchService implements SmartLifecycle {
                         .set("status", "failed")
                         .set("error", error)
                         .set("processedAt", LocalDateTime.now()),
-                DeviceCommand.class
-        );
+                DeviceCommand.class);
     }
 
     // -------------------------------------------------------------------------
@@ -282,7 +282,8 @@ public class CommandDispatchService implements SmartLifecycle {
 
     /**
      * Parses a JT808 message ID string to its integer value.
-     * Accepted formats: {@code "T8104"}, {@code "8104"}, {@code "0x8104"} — all hex.
+     * Accepted formats: {@code "T8104"}, {@code "8104"}, {@code "0x8104"} — all
+     * hex.
      */
     private int parseMessageId(String value) {
         String hex = value.trim();
