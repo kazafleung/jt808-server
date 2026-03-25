@@ -39,11 +39,20 @@ public class DeviceService {
     public Device saveOrUpdate(Device device) {
         return deviceRepository.findByMobileNo(device.getMobileNo())
                 .map(existing -> {
-                    // update mutable fields, preserve registeredAt
+                    // Use targeted $set so extra fields not mapped in Device (e.g. app-server
+                    // fields)
+                    // are never touched by a full document replacement.
+                    mongoTemplate.updateFirst(
+                            Query.query(Criteria.where("_id").is(existing.getId())),
+                            new Update()
+                                    .set("did", device.getDeviceId())
+                                    .set("pln", device.getPlateNo())
+                                    .set("pv", device.getProtocolVersion()),
+                            Device.class);
                     existing.setDeviceId(device.getDeviceId());
                     existing.setPlateNo(device.getPlateNo());
                     existing.setProtocolVersion(device.getProtocolVersion());
-                    return deviceRepository.save(existing);
+                    return existing;
                 })
                 .orElseGet(() -> {
                     device.setRegisteredAt(LocalDateTime.now());
