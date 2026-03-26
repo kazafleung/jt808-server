@@ -13,6 +13,9 @@ import org.bson.Document;
 import org.bson.conversions.Bson;
 import org.springframework.context.SmartLifecycle;
 import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.data.mongodb.core.query.Criteria;
+import org.springframework.data.mongodb.core.query.Query;
+import org.springframework.data.mongodb.core.query.Update;
 import org.springframework.stereotype.Service;
 import org.yzh.protocol.t808.T0001;
 import org.yzh.protocol.t1078.T9101;
@@ -208,6 +211,17 @@ public class StreamSessionWatchService implements SmartLifecycle {
         request.setClientId(streamSession.getClientId());
 
         messageManager.request(request, T0001.class)
+                .doOnSuccess(resp -> {
+                    mongoTemplate.updateFirst(
+                            Query.query(Criteria.where("cid").is(streamSession.getClientId())
+                                    .and("cho").is(streamSession.getChannelNo())),
+                            new Update()
+                                    .set("sip", cfg.getIp())
+                                    .set("stp", cfg.getTcpPort())
+                                    .set("sup", cfg.getUdpPort())
+                                    .set("st", StreamSession.Status.REQUESTED.name()),
+                            StreamSession.class);
+                })
                 .subscribe(
                         resp -> log.info("T9101 auto-start succeeded: clientId={} channelNo={}",
                                 streamSession.getClientId(), streamSession.getChannelNo()),
