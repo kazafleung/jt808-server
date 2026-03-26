@@ -12,6 +12,7 @@ import org.springframework.data.mongodb.core.mapping.Field;
 
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
+import java.util.List;
 
 /**
  * Tracks live streaming sessions initiated via JT/T 1078 T9101 commands.
@@ -73,6 +74,23 @@ public class StreamSession {
     @Schema(description = "最后状态更新时间 (UTC)")
     @Field("upAt")
     private LocalDateTime updatedAt;
+
+    @Schema(description = "订阅者列表")
+    private List<Subscriber> subscribers;
+
+    /** A user who has subscribed to watch this stream. */
+    @Data
+    @Accessors(chain = true)
+    public static class Subscriber {
+        @Field("_id")
+        private String id;
+
+        @Field("userId")
+        private String userId;
+
+        @Field("subscribedAt")
+        private LocalDateTime subscribedAt;
+    }
 
     public enum Status {
         /** T9101 sent, waiting for device to connect to media server */

@@ -12,7 +12,7 @@ import org.yzh.protocol.t1078.T9206;
 
 /**
  * @author yezhihao
- * https://gitee.com/yezhihao/jt808-server
+ *         https://gitee.com/yezhihao/jt808-server
  */
 @Data
 @Configuration
@@ -28,8 +28,19 @@ public class JTProperties {
     /** 消息类包名 */
     private String messagePackage;
     private C0801 t0801;
+    private C9101 t9101;
     private C9208 t9208;
     private C9206 t9206;
+
+    @Data
+    public static class C9101 {
+        /** T9101实时音视频传输 媒体服务器IP地址 */
+        private String ip;
+        /** T9101实时音视频传输 媒体服务器TCP端口 */
+        private int tcpPort;
+        /** T9101实时音视频传输 媒体服务器UDP端口 */
+        private int udpPort;
+    }
 
     @Data
     public static class C0801 {

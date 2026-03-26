@@ -41,6 +41,10 @@ jt-server:
     message-package: org.yzh.protocol
     t0801:
       path: ./jt_data/media_file
+    t9101:
+      ip: 152.69.210.81
+      tcp-port: 1078
+      udp-port: 1078
     t9208:
       host: 152.69.210.81
       port: 10780
