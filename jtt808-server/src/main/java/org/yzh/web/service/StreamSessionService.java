@@ -2,6 +2,11 @@ package org.yzh.web.service;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.mongodb.core.FindAndModifyOptions;
+import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.data.mongodb.core.query.Criteria;
+import org.springframework.data.mongodb.core.query.Query;
+import org.springframework.data.mongodb.core.query.Update;
 import org.springframework.stereotype.Service;
 import org.yzh.protocol.t1078.T9101;
 import org.yzh.protocol.t1078.T9102;
@@ -18,30 +23,39 @@ import java.util.Optional;
 public class StreamSessionService {
 
     private final StreamSessionRepository streamSessionRepository;
+    private final MongoTemplate mongoTemplate;
 
     /**
      * Called after a T9101 command is successfully sent.
-     * Creates or replaces the stream session record with REQUESTED status.
+     * Upserts only the stream config fields — never touches the subscribers array,
+     * avoiding ObjectId→String type coercion on round-trip.
      */
     public StreamSession startStream(T9101 request) {
-        StreamSession session = streamSessionRepository
-                .findByClientIdAndChannelNo(request.getClientId(), request.getChannelNo())
-                .orElse(new StreamSession());
+        String clientId = request.getClientId();
+        int channelNo = request.getChannelNo();
 
-        session.setClientId(request.getClientId())
-                .setChannelNo(request.getChannelNo())
-                .setTag(StreamSession.buildTag(request.getClientId(), request.getChannelNo()))
-                .setMediaType(request.getMediaType())
-                .setStreamType(request.getStreamType())
-                .setServerIp(request.getIp())
-                .setServerTcpPort(request.getTcpPort())
-                .setServerUdpPort(request.getUdpPort())
-                .setStatus(StreamSession.Status.REQUESTED)
-                .setRequestedAt(LocalDateTime.now(ZoneOffset.UTC))
-                .markUpdated();
+        Query query = Query.query(
+                Criteria.where("cid").is(clientId).and("cho").is(channelNo));
 
-        StreamSession saved = streamSessionRepository.save(session);
-        log.info("Stream session started: clientId={}, channelNo={}", saved.getClientId(), saved.getChannelNo());
+        Update update = new Update()
+                .set("cid", clientId)
+                .set("cho", channelNo)
+                .set("tag", StreamSession.buildTag(clientId, channelNo))
+                .set("mt", request.getMediaType())
+                .set("sty", request.getStreamType())
+                .set("sip", request.getIp())
+                .set("stp", request.getTcpPort())
+                .set("sup", request.getUdpPort())
+                .set("st", StreamSession.Status.REQUESTED.name())
+                .set("reqAt", LocalDateTime.now(ZoneOffset.UTC))
+                .set("upAt", LocalDateTime.now(ZoneOffset.UTC));
+
+        StreamSession saved = mongoTemplate.findAndModify(
+                query, update,
+                FindAndModifyOptions.options().upsert(true).returnNew(true),
+                StreamSession.class);
+
+        log.info("Stream session started: clientId={}, channelNo={}", clientId, channelNo);
         return saved;
     }
 
