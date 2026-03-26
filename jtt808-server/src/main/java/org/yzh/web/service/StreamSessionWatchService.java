@@ -45,7 +45,6 @@ public class StreamSessionWatchService implements SmartLifecycle {
     private final MongoTemplate mongoTemplate;
     private final SessionManager sessionManager;
     private final MessageManager messageManager;
-    private final StreamSessionService streamSessionService;
     private final JTProperties jtProperties;
 
     private volatile boolean running = false;
@@ -155,7 +154,46 @@ public class StreamSessionWatchService implements SmartLifecycle {
             log.info("Subscribers found for clientId={} channelNo={} (status=STOPPED) — sending T9101 start",
                     clientId, streamSession.getChannelNo());
             startStream(streamSession);
+
+        } else if (status == StreamSession.Status.ERROR) {
+            if (hasSubscribers) {
+                log.info("Stream ERROR with subscribers for clientId={} channelNo={} — restarting",
+                        clientId, streamSession.getChannelNo());
+                restartStream(streamSession);
+            } else {
+                log.info("Stream ERROR with no subscribers for clientId={} channelNo={} — sending T9102 stop",
+                        clientId, streamSession.getChannelNo());
+                stopStream(streamSession);
+            }
         }
+    }
+
+    private void restartStream(StreamSession streamSession) {
+        T9102 stopRequest = new T9102()
+                .setChannelNo(streamSession.getChannelNo())
+                .setCommand(0)
+                .setCloseType(0)
+                .setStreamType(streamSession.getStreamType());
+        stopRequest.setClientId(streamSession.getClientId());
+
+        messageManager.request(stopRequest, T0001.class)
+                .flatMap(resp -> {
+                    JTProperties.C9101 cfg = jtProperties.getT9101();
+                    T9101 startRequest = new T9101()
+                            .setChannelNo(streamSession.getChannelNo())
+                            .setMediaType(streamSession.getMediaType())
+                            .setStreamType(streamSession.getStreamType())
+                            .setIp(cfg.getIp())
+                            .setTcpPort(cfg.getTcpPort())
+                            .setUdpPort(cfg.getUdpPort());
+                    startRequest.setClientId(streamSession.getClientId());
+                    return messageManager.request(startRequest, T0001.class);
+                })
+                .subscribe(
+                        resp -> log.info("Stream restart succeeded: clientId={} channelNo={}",
+                                streamSession.getClientId(), streamSession.getChannelNo()),
+                        err -> log.warn("Stream restart failed: clientId={} channelNo={} — {}",
+                                streamSession.getClientId(), streamSession.getChannelNo(), err.getMessage()));
     }
 
     private void startStream(StreamSession streamSession) {
@@ -170,7 +208,6 @@ public class StreamSessionWatchService implements SmartLifecycle {
         request.setClientId(streamSession.getClientId());
 
         messageManager.request(request, T0001.class)
-                .doOnSuccess(resp -> streamSessionService.startStream(request))
                 .subscribe(
                         resp -> log.info("T9101 auto-start succeeded: clientId={} channelNo={}",
                                 streamSession.getClientId(), streamSession.getChannelNo()),
@@ -187,7 +224,6 @@ public class StreamSessionWatchService implements SmartLifecycle {
         request.setClientId(streamSession.getClientId());
 
         messageManager.request(request, T0001.class)
-                .doOnSuccess(resp -> streamSessionService.controlStream(request))
                 .subscribe(
                         resp -> log.info("T9102 auto-stop succeeded: clientId={} channelNo={}",
                                 streamSession.getClientId(), streamSession.getChannelNo()),

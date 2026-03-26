@@ -61,26 +61,33 @@ public class StreamSessionService {
 
     /**
      * Called after a T9102 control command is successfully sent.
-     * Updates status based on the command field:
+     * Uses $set on individual fields — never touches the subscribers array.
      * 0 = close → STOPPED
-     * 1 = switch stream → update streamType only (stays STREAMING/REQUESTED)
+     * 1 = switch stream → update streamType only
      * 2 = pause → PAUSED
      * 3 = resume → STREAMING
      * 4 = close talk → STOPPED
      */
     public Optional<StreamSession> controlStream(T9102 request) {
-        return streamSessionRepository
-                .findByClientIdAndChannelNo(request.getClientId(), request.getChannelNo())
-                .map(session -> {
-                    switch (request.getCommand()) {
-                        case 0, 4 -> session.setStatus(StreamSession.Status.STOPPED);
-                        case 1 -> session.setStreamType(request.getStreamType());
-                        case 2 -> session.setStatus(StreamSession.Status.PAUSED);
-                        case 3 -> session.setStatus(StreamSession.Status.STREAMING);
-                        default -> log.warn("Unknown T9102 command: {}", request.getCommand());
-                    }
-                    session.markUpdated();
-                    return streamSessionRepository.save(session);
-                });
+        Query query = Query.query(
+                Criteria.where("cid").is(request.getClientId()).and("cho").is(request.getChannelNo()));
+
+        Update update = new Update().set("upAt", LocalDateTime.now(ZoneOffset.UTC));
+        switch (request.getCommand()) {
+            case 0, 4 -> update.set("st", StreamSession.Status.STOPPED.name());
+            case 1 -> update.set("sty", request.getStreamType());
+            case 2 -> update.set("st", StreamSession.Status.PAUSED.name());
+            case 3 -> update.set("st", StreamSession.Status.STREAMING.name());
+            default -> {
+                log.warn("Unknown T9102 command: {}", request.getCommand());
+                return Optional.empty();
+            }
+        }
+
+        StreamSession result = mongoTemplate.findAndModify(
+                query, update,
+                FindAndModifyOptions.options().returnNew(true),
+                StreamSession.class);
+        return Optional.ofNullable(result);
     }
 }

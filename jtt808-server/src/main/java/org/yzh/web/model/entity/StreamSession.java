@@ -100,7 +100,9 @@ public class StreamSession {
         /** T9102 command=2: stream paused */
         PAUSED,
         /** T9102 command=0/4: stream closed, or media server lost the stream */
-        STOPPED
+        STOPPED,
+        /** Media server reported a stream error */
+        ERROR
     }
 
     public StreamSession markUpdated() {
