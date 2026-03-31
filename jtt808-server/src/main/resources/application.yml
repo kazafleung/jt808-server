@@ -38,7 +38,7 @@ jt-server:
     tcp-port: 7100
     udp-port: 7100
     idle-timeout: 180
-    message-package: org.yzh.protocol
+    message-package: org.zendo.protocol
     t0801:
       path: ./jt_data/media_file
     t9101:

@@ -11,7 +11,7 @@
         <relativePath />
     </parent>
 
-    <groupId>org.yzh</groupId>
+    <groupId>org.zendo</groupId>
     <artifactId>jtt808-parent</artifactId>
     <version>1.0.0-SNAPSHOT</version>
     <packaging>pom</packaging>
