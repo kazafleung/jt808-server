@@ -74,7 +74,7 @@ public class LocationRecord {
         @Field("dir")
         private int direction;
 
-        /** 位置附加信息 */
+        /** 位置附加信息（原始Map，key=附加信息ID） */
         @Field("attr")
         private Map<Integer, Object> attributes;
 

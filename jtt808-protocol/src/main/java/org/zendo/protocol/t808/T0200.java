@@ -15,7 +15,7 @@ import java.util.Map;
 
 /**
  * @author yezhihao
- * https://gitee.com/yezhihao/jt808-server
+ *         https://gitee.com/yezhihao/jt808-server
  */
 @ToString
 @Data
@@ -25,6 +25,7 @@ public class T0200 extends JTMessage {
 
     /**
      * 使用 Bit.isTrue判断报警和状态标志位
+     * 
      * @see org.zendo.protocol.commons.Bit
      */
     @Field(length = 4, desc = "报警标志")
@@ -43,7 +44,7 @@ public class T0200 extends JTMessage {
     private int direction;
     @Field(length = 6, charset = "BCD", desc = "时间(YYMMDDHHMMSS)")
     private LocalDateTime deviceTime;
-    @Field(converter = AttributeConverter.class, desc = "位置附加信息", version = {-1, 0})
+    @Field(converter = AttributeConverter.class, desc = "位置附加信息", version = { -1, 0 })
     @Field(converter = AttributeConverterYue.class, desc = "位置附加信息(粤标)", version = 1)
     private Map<Integer, Object> attributes;
 
@@ -76,6 +77,6 @@ public class T0200 extends JTMessage {
     }
 
     public float getSpeedKph() {
-        return latitude / 10f;
+        return speed / 10f;
     }
 }
