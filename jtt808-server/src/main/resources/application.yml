@@ -24,6 +24,13 @@ mybatis-plus:
 server:
   port: 8100
 
+# HTTP base URL of this instance — used by the app server to route JT808 REST calls
+# to the instance holding the device's TCP connection.
+# Override per deployment, e.g. with the pod/VM IP:
+#   instance.url: http://10.0.1.3:${server.port}
+instance:
+  url: http://152.69.210.81:${server.port}
+
 oci:
   auth-type: INSTANCE_PRINCIPAL # Options: CONFIG_FILE, INSTANCE_PRINCIPAL
   config:

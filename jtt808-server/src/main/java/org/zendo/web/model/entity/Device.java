@@ -52,6 +52,10 @@ public class Device {
     @Field("st")
     private DeviceStatus status;
 
+    @Schema(description = "持有此设备TCP连接的JT808实例地址", hidden = true)
+    @Field("iurl")
+    private String instanceUrl;
+
     public void updateStatus(DeviceStatus status) {
         if (this.status == null) {
             this.status = status;

@@ -64,6 +64,20 @@ public class DeviceService {
     }
 
     /**
+     * Set or clear the JT808 instance URL that owns this device's TCP session.
+     * Called on sessionRegistered (set) and sessionDestroyed (clear).
+     */
+    public void setInstanceUrl(String mobileNo, String instanceUrl) {
+        Update update = instanceUrl != null
+                ? new Update().set("iurl", instanceUrl)
+                : new Update().unset("iurl");
+        mongoTemplate.updateFirst(
+                Query.query(Criteria.where("mob").is(mobileNo)),
+                update,
+                Device.class);
+    }
+
+    /**
      * Bulk-update each device's latest location in MongoDB.
      * Only writes if the incoming deviceTime is newer than what is stored.
      */
