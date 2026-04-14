@@ -11,6 +11,8 @@ import org.springframework.data.mongodb.core.index.GeoSpatialIndexType;
 import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
 import org.springframework.data.mongodb.core.mapping.Field;
+import org.zendo.protocol.commons.Bit;
+import org.zendo.protocol.commons.transform.AttributeKey;
 import org.zendo.protocol.t808.T0200;
 
 import java.time.LocalDateTime;
@@ -78,11 +80,24 @@ public class LocationRecord {
         @Field("attr")
         private Map<Integer, Object> attributes;
 
+        /** ACC状态 (statusBit bit0) */
+        @Field("acc")
+        private boolean accOn;
+
+        /** 0x30 无线通信网络信号强度 */
+        @Field("a30")
+        private Integer signalStrength;
+
+        /** 0x31 GNSS定位卫星数 */
+        @Field("a31")
+        private Integer gnssCount;
+
         public static LocationRecord from(T0200 msg) {
                 // deviceTime from JT808 is always CST (UTC+8); convert to UTC for storage
                 LocalDateTime deviceTimeUtc = msg.getDeviceTime() == null ? null
                                 : msg.getDeviceTime().atZone(ZoneId.of("Asia/Hong_Kong"))
                                                 .withZoneSameInstant(ZoneOffset.UTC).toLocalDateTime();
+                Map<Integer, Object> attrs = msg.getAttributes();
                 return new LocationRecord()
                                 .setClientId(msg.getClientId())
                                 .setDeviceTime(deviceTimeUtc)
@@ -93,6 +108,10 @@ public class LocationRecord {
                                 .setAltitude(msg.getAltitude())
                                 .setSpeed(msg.getSpeed())
                                 .setDirection(msg.getDirection())
-                                .setAttributes(msg.getAttributes());
+                                .setAttributes(attrs)
+                                .setAccOn(Bit.isTrue(msg.getStatusBit(), 0))
+                                .setSignalStrength(
+                                                attrs != null ? (Integer) attrs.get(AttributeKey.SignalStrength) : null)
+                                .setGnssCount(attrs != null ? (Integer) attrs.get(AttributeKey.GnssCount) : null);
         }
 }

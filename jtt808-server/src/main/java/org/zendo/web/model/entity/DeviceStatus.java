@@ -85,14 +85,6 @@ public class DeviceStatus extends LocationRecord {
     @Field("a2b")
     private Integer analogQuantity;
 
-    /** 0x30 无线通信网络信号强度 */
-    @Field("a30")
-    private Integer signalStrength;
-
-    /** 0x31 GNSS定位卫星数 */
-    @Field("a31")
-    private Integer gnssCount;
-
     public static DeviceStatus from(T0200 msg) {
         LocationRecord base = LocationRecord.from(msg);
         DeviceStatus dl = new DeviceStatus();
@@ -108,6 +100,9 @@ public class DeviceStatus extends LocationRecord {
         dl.setSpeed(base.getSpeed());
         dl.setDirection(base.getDirection());
         dl.setAttributes(base.getAttributes());
+        dl.setAccOn(base.isAccOn());
+        dl.setSignalStrength(base.getSignalStrength());
+        dl.setGnssCount(base.getGnssCount());
         // decoded bit fields
         dl.setWarn(WarnBits.from(msg.getWarnBit()));
         dl.setStatus(StatusBits.from(msg.getStatusBit()));
@@ -126,8 +121,6 @@ public class DeviceStatus extends LocationRecord {
             dl.setSignal((Integer) attrs.get(AttributeKey.Signal));
             dl.setIoState((Integer) attrs.get(AttributeKey.IoState));
             dl.setAnalogQuantity((Integer) attrs.get(AttributeKey.AnalogQuantity));
-            dl.setSignalStrength((Integer) attrs.get(AttributeKey.SignalStrength));
-            dl.setGnssCount((Integer) attrs.get(AttributeKey.GnssCount));
         }
         return dl;
     }
