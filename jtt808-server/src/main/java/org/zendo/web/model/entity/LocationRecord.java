@@ -85,11 +85,11 @@ public class LocationRecord {
         private boolean accOn;
 
         /** 0x30 无线通信网络信号强度 */
-        @Field("a30")
+        @Field("sig")
         private Integer signalStrength;
 
         /** 0x31 GNSS定位卫星数 */
-        @Field("a31")
+        @Field("sat")
         private Integer gnssCount;
 
         public static LocationRecord from(T0200 msg) {
