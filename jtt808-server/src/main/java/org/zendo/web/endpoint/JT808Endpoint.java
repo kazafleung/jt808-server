@@ -13,6 +13,7 @@ import org.zendo.protocol.commons.JT808;
 import org.zendo.protocol.t808.*;
 import org.zendo.web.model.entity.Device;
 import org.zendo.web.model.enums.SessionKey;
+import org.zendo.web.config.DiagnosticsProperties;
 import org.zendo.web.service.DeviceService;
 import org.zendo.web.service.FileService;
 import org.zendo.web.service.LocationService;
@@ -32,6 +33,7 @@ public class JT808Endpoint {
     private final DeviceService deviceService;
     private final FileService fileService;
     private final LocationService locationService;
+    private final DiagnosticsProperties diagnosticsProperties;
 
     @Mapping(types = 终端通用应答, desc = "终端通用应答")
     public Object T0001(T0001 message, Session session) {
@@ -126,7 +128,7 @@ public class JT808Endpoint {
     @Mapping(types = 位置信息汇报, desc = "位置信息汇报")
     public void T0200(List<T0200> list) {
         locationService.saveBatch(list);
-        deviceService.updateLatestLocations(list);
+        deviceService.updateDeviceData(list, diagnosticsProperties);
     }
 
     @Mapping(types = 定位数据批量上传, desc = "定位数据批量上传")
@@ -134,11 +136,11 @@ public class JT808Endpoint {
         if (message.getItems() != null) {
             message.getItems().forEach(item -> item.setClientId(message.getClientId()));
             locationService.saveBatch(message.getItems());
-            deviceService.updateLatestLocations(message.getItems());
+            deviceService.updateDeviceData(message.getItems(), diagnosticsProperties);
         }
     }
 
-    @Mapping(types = {位置信息查询应答, 车辆控制应答}, desc = "位置信息查询应答/车辆控制应答")
+    @Mapping(types = { 位置信息查询应答, 车辆控制应答 }, desc = "位置信息查询应答/车辆控制应答")
     public void T0201_0500(T0201_0500 message, Session session) {
         session.response(message);
     }

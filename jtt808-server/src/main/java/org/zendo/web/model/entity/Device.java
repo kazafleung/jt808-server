@@ -56,6 +56,14 @@ public class Device {
     @Field("iurl")
     private String instanceUrl;
 
+    @Schema(description = "GPS质量滚动统计（卫星数）", hidden = true)
+    @Field("dg")
+    private DeviceDiagStat diagGps;
+
+    @Schema(description = "信号强度滚动统计", hidden = true)
+    @Field("ds")
+    private DeviceDiagStat diagSig;
+
     public void updateStatus(DeviceStatus status) {
         if (this.status == null) {
             this.status = status;

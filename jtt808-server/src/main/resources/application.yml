@@ -40,6 +40,16 @@ oci:
   namespace: ax0s9dy3myes
   region: ap-singapore-1
 
+diagnostics:
+  # Minutes of silence (ACC on, speed > 0) before a device is flagged as abnormally offline
+  offline-minutes: 5
+  # Rolling window for GPS / signal quality counters (hours)
+  window-hours: 24
+  # GNSS satellite count below this → location record is "bad" for GPS quality check
+  satellite-threshold: 6
+  # Wireless signal strength below this → record is "bad" for signal quality check
+  signal-threshold: 15
+
 jt-server:
   jt808:
     tcp-port: 7100
