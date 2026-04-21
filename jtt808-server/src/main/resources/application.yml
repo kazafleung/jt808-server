@@ -43,8 +43,8 @@ oci:
 diagnostics:
   # Minutes of silence (ACC on, speed > 0) before a device is flagged as abnormally offline
   offline-minutes: 5
-  # Rolling window for GPS / signal quality counters (hours)
-  window-hours: 24
+  # Timezone for the calendar-day window boundary (IANA zone ID)
+  window-zone: Asia/Hong_Kong
   # GNSS satellite count below this → location record is "bad" for GPS quality check
   satellite-threshold: 6
   # Wireless signal strength below this → record is "bad" for signal quality check

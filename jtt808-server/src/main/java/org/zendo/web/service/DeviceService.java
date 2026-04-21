@@ -17,10 +17,13 @@ import org.zendo.protocol.commons.transform.AttributeKey;
 import org.zendo.protocol.t808.T0200;
 import org.zendo.web.config.DiagnosticsProperties;
 import org.zendo.web.model.entity.Device;
+import org.zendo.web.model.entity.DeviceDiagDaily;
 import org.zendo.web.model.entity.DeviceStatus;
 import org.zendo.web.repository.DeviceRepository;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.*;
 
@@ -84,17 +87,18 @@ public class DeviceService {
 
     /**
      * Unified write: advances the device status snapshot AND increments the
-     * rolling-window diagnostic counters in a single MongoDB bulkWrite, so the
-     * {@code devices} collection is touched exactly once per batch.
+     * calendar-day diagnostic counters in a single MongoDB bulkWrite.
      *
      * <p>
-     * <b>Status</b> — updated only when the incoming deviceTime is strictly
-     * newer than what is already stored (pipeline {@code $cond}).
+     * <b>Window</b> — each counter covers one full calendar day
+     * ({@code 00:00–23:59}) in the configured timezone. When the first update
+     * after midnight arrives, the old day's counters are saved as a
+     * {@link DeviceDiagDaily} summary before being reset.
      *
      * <p>
-     * <b>Diagnostic counters</b> — ALL records in the batch are counted per
-     * device (not just the deduplicated latest), so a T0704 bulk-upload of 100
-     * records contributes 100 to {@code tot}, not 1.
+     * <b>Concurrency</b> — summaries use a composite {@code _id}
+     * ({@code mobileNo_YYYY-MM-DD}) so concurrent resets from multiple threads
+     * or server instances are idempotent.
      */
     public void updateDeviceData(List<T0200> list, DiagnosticsProperties props) {
         if (list == null || list.isEmpty())
@@ -111,9 +115,14 @@ public class DeviceService {
         if (byDevice.isEmpty())
             return;
 
-        Date cutoff = Date.from(LocalDateTime.now(ZoneOffset.UTC)
-                .minusHours(props.getWindowHours()).toInstant(ZoneOffset.UTC));
-        Date now = Date.from(LocalDateTime.now(ZoneOffset.UTC).toInstant(ZoneOffset.UTC));
+        // Calendar-day window boundaries — zone-aware, but stored in UTC
+        ZoneId zone = ZoneId.of(props.getWindowZone());
+        LocalDateTime todayStartUtc = LocalDate.now(zone)
+                .atStartOfDay(zone).withZoneSameInstant(ZoneOffset.UTC).toLocalDateTime();
+        Date todayStartBson = Date.from(todayStartUtc.toInstant(ZoneOffset.UTC));
+
+        // Save daily summaries for devices whose window has just expired
+        writeDailySummaries(new ArrayList<>(byDevice.keySet()), todayStartUtc, zone);
 
         MongoCollection<Document> col = mongoTemplate.getDb().getCollection("devices");
         List<WriteModel<Document>> bulk = new ArrayList<>(byDevice.size());
@@ -122,7 +131,6 @@ public class DeviceService {
             String clientId = entry.getKey();
             List<T0200> records = entry.getValue();
 
-            // Latest record drives the status snapshot
             T0200 latest = records.stream()
                     .max(Comparator.comparing(T0200::getDeviceTime))
                     .orElse(null);
@@ -132,12 +140,9 @@ public class DeviceService {
             DeviceStatus status = DeviceStatus.from(latest);
             Date deviceTimeBson = Date.from(status.getDeviceTime().toInstant(ZoneOffset.UTC));
 
-            // Serialize via Spring Data so @Field annotations and type converters are
-            // respected
             Document statusBson = new Document();
             mongoTemplate.getConverter().write(status, statusBson);
 
-            // Accumulate GPS and signal counts across ALL records in this batch
             int gpsTot = 0, gpsBad = 0, sigTot = 0, sigBad = 0;
             for (T0200 t : records) {
                 Map<Integer, Object> attrs = t.getAttributes();
@@ -165,12 +170,11 @@ public class DeviceService {
                     statusBson,
                     "$st")));
 
-            // Diagnostic counters (only if this batch carries the field)
             if (gpsTot > 0) {
-                setDoc.append("dg", buildWindowedCounterExpr("dg", gpsTot, gpsBad, cutoff, now));
+                setDoc.append("dg", buildWindowedCounterExpr("dg", gpsTot, gpsBad, todayStartBson));
             }
             if (sigTot > 0) {
-                setDoc.append("ds", buildWindowedCounterExpr("ds", sigTot, sigBad, cutoff, now));
+                setDoc.append("ds", buildWindowedCounterExpr("ds", sigTot, sigBad, todayStartBson));
             }
 
             bulk.add(new UpdateOneModel<>(
@@ -184,27 +188,91 @@ public class DeviceService {
     }
 
     /**
-     * Builds the aggregation-pipeline expression for a rolling-window counter:
-     * resets to {@code {ws: now, tot: batchTot, bad: batchBad}} when the window
-     * has expired; otherwise increments the existing counters in-place.
+     * For devices in {@code clientIds} that have an expired window
+     * ({@code dg.ws} or {@code ds.ws} before today), writes a
+     * {@link DeviceDiagDaily} summary record and returns. The composite
+     * {@code _id} makes the upsert idempotent.
+     */
+    private void writeDailySummaries(
+            List<String> clientIds, LocalDateTime todayStartUtc, ZoneId zone) {
+
+        Criteria expiredGps = Criteria.where("dg.ws").lt(todayStartUtc)
+                .and("dg.tot").gt(0);
+        Criteria expiredSig = Criteria.where("ds.ws").lt(todayStartUtc)
+                .and("ds.tot").gt(0);
+
+        List<Device> expired = mongoTemplate.find(
+                Query.query(Criteria.where("mob").in(clientIds)
+                        .orOperator(expiredGps, expiredSig)),
+                Device.class);
+
+        for (Device d : expired) {
+            LocalDate summaryDate = resolveSummaryDate(d, zone);
+            if (summaryDate == null)
+                continue;
+
+            DeviceDiagDaily summary = new DeviceDiagDaily()
+                    .setId(DeviceDiagDaily.buildId(d.getMobileNo(), summaryDate))
+                    .setMobileNo(d.getMobileNo())
+                    .setDate(summaryDate)
+                    .setGps(d.getDiagGps())
+                    .setSignal(d.getDiagSig())
+                    .setCreatedAt(LocalDateTime.now(ZoneOffset.UTC));
+
+            mongoTemplate.save(summary);
+        }
+    }
+
+    /**
+     * Returns the calendar date of the expired window, derived from whichever
+     * {@link org.zendo.web.model.entity.DeviceDiagStat} has a non-null
+     * {@code windowStart}.
+     */
+    private static LocalDate resolveSummaryDate(Device d, ZoneId zone) {
+        LocalDateTime ws = null;
+        if (d.getDiagGps() != null && d.getDiagGps().getWindowStart() != null)
+            ws = d.getDiagGps().getWindowStart();
+        else if (d.getDiagSig() != null && d.getDiagSig().getWindowStart() != null)
+            ws = d.getDiagSig().getWindowStart();
+        if (ws == null)
+            return null;
+        return ws.atZone(ZoneOffset.UTC).withZoneSameInstant(zone).toLocalDate();
+    }
+
+    /**
+     * Builds the aggregation-pipeline expression for a calendar-day counter:
+     * resets to {@code {ws: todayStart, tot: batchTot, bad: batchBad, ratio: ...}}
+     * when the window has expired (ws &lt; todayStart); otherwise increments
+     * the existing counters in-place.
+     *
+     * <p>
+     * Using {@code todayStart} (not {@code now}) as the new {@code ws}
+     * ensures all resets within the same day share the same window-start value.
      */
     private static Document buildWindowedCounterExpr(
-            String field, int batchTot, int batchBad, Date cutoff, Date now) {
+            String field, int batchTot, int batchBad, Date todayStart) {
 
         Document wsOrEpoch = new Document("$ifNull",
                 Arrays.asList("$" + field + ".ws", new Date(0)));
 
-        Document isExpired = new Document("$lt", Arrays.asList(wsOrEpoch, cutoff));
+        Document isExpired = new Document("$lt", Arrays.asList(wsOrEpoch, todayStart));
 
-        Document resetDoc = new Document("ws", now)
+        Document resetDoc = new Document("ws", todayStart)
                 .append("tot", batchTot)
-                .append("bad", batchBad);
+                .append("bad", batchBad)
+                .append("ratio", batchTot == 0 ? 0.0 : (double) batchBad / batchTot);
+
+        Document newTot = new Document("$add", Arrays.asList("$" + field + ".tot", batchTot));
+        Document newBad = new Document("$add", Arrays.asList("$" + field + ".bad", batchBad));
+        Document newRatio = new Document("$cond", Arrays.asList(
+                new Document("$eq", Arrays.asList(newTot, 0)),
+                0.0,
+                new Document("$divide", Arrays.asList(newBad, newTot))));
 
         Document incrDoc = new Document("ws", "$" + field + ".ws")
-                .append("tot", new Document("$add",
-                        Arrays.asList("$" + field + ".tot", batchTot)))
-                .append("bad", new Document("$add",
-                        Arrays.asList("$" + field + ".bad", batchBad)));
+                .append("tot", newTot)
+                .append("bad", newBad)
+                .append("ratio", newRatio);
 
         return new Document("$cond", Arrays.asList(isExpired, resetDoc, incrDoc));
     }

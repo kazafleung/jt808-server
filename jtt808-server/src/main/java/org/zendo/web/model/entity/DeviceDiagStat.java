@@ -31,8 +31,10 @@ public class DeviceDiagStat {
     @Field("bad")
     private int bad;
 
-    /** Computed bad ratio; returns 0 when {@code total == 0}. */
-    public double badRatio() {
-        return total == 0 ? 0.0 : (double) bad / total;
-    }
+    /**
+     * Pre-computed ratio (bad/tot); stored for indexed range queries by the app
+     * server.
+     */
+    @Field("ratio")
+    private double ratio;
 }

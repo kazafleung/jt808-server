@@ -15,8 +15,11 @@ public class DiagnosticsProperties {
      */
     private int offlineMinutes = 5;
 
-    /** Rolling window length used for GPS and signal quality checks. */
-    private int windowHours = 24;
+    /**
+     * Timezone used to determine the calendar-day boundary for GPS / signal
+     * quality windows. Defaults to UTC. Use IANA zone IDs, e.g. "Asia/Hong_Kong".
+     */
+    private String windowZone = "UTC";
 
     /**
      * GNSS satellite count below this value is considered a "bad" location fix.
