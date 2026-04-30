@@ -40,6 +40,17 @@ public class AttributeConverter extends MapSchema<Number, Object> {
                 // 0x13 路段行驶时间不足/过长报警附加信息, 7字节
                 .addSchema(AttributeKey.RouteDriveTimeAlarm, RouteDriveTimeAlarm.SCHEMA)
 
+                // 0x14 视频相关报警, DWORD, 按位设置
+                .addSchema(AttributeKey.VideoRelatedAlarm, NumberSchema.DWORD_INT)
+                // 0x15 视频信号丢失报警状态, DWORD, 按位设置 bit0~bit31对应第1~32逻辑通道
+                .addSchema(AttributeKey.VideoMissingStatus, NumberSchema.DWORD_INT)
+                // 0x16 视频信号遮挡报警状态, DWORD, 按位设置 bit0~bit31对应第1~32逻辑通道
+                .addSchema(AttributeKey.VideoObscuredStatus, NumberSchema.DWORD_INT)
+                // 0x17 存储器故障报警状态, WORD, 按位设置 bit0~bit11主存储器 bit12~bit15灾备存储装置
+                .addSchema(AttributeKey.StorageFailureStatus, NumberSchema.WORD_INT)
+                // 0x18 异常驾驶行为报警详细描述, WORD
+                .addSchema(AttributeKey.DriverBehaviorAlarm, NumberSchema.WORD_INT)
+
                 // 0x25 扩展车辆信号状态位, DWORD
                 .addSchema(AttributeKey.Signal, NumberSchema.DWORD_INT)
                 // 0x2A IO状态位, WORD

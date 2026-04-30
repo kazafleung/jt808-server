@@ -34,34 +34,48 @@ public class T0200Ext {
         Map<Integer, Object> attributes = t.getAttributes();
         if (attributes != null) {
             List<Alarm> alarmList = new ArrayList<>();
-            Alarm alarm = (Alarm) attributes.get(AlarmADAS.key);
-            if (alarm != null && alarm.getState() != 2) {
-                alarmList.add(alarm);
+            Object raw;
+            Alarm alarm;
+
+            raw = attributes.get(AlarmADAS.key);
+            if (raw instanceof Alarm) {
+                alarm = (Alarm) raw;
+                if (alarm.getState() != 2)
+                    alarmList.add(alarm);
             }
-            alarm = (Alarm) attributes.get(AlarmBSD.key);
-            if (alarm != null && alarm.getState() != 2) {
-                alarmList.add(alarm);
+            raw = attributes.get(AlarmBSD.key);
+            if (raw instanceof Alarm) {
+                alarm = (Alarm) raw;
+                if (alarm.getState() != 2)
+                    alarmList.add(alarm);
             }
-            alarm = (Alarm) attributes.get(AlarmDSM.key);
-            if (alarm != null && alarm.getState() != 2) {
-                alarmList.add(alarm);
+            raw = attributes.get(AlarmDSM.key);
+            if (raw instanceof Alarm) {
+                alarm = (Alarm) raw;
+                if (alarm.getState() != 2)
+                    alarmList.add(alarm);
             }
-            alarm = (Alarm) attributes.get(AlarmTPMS.key);
-            if (alarm != null && alarm.getState() != 2) {
-                alarmList.add(alarm);
+            raw = attributes.get(AlarmTPMS.key);
+            if (raw instanceof Alarm) {
+                alarm = (Alarm) raw;
+                if (alarm.getState() != 2)
+                    alarmList.add(alarm);
             }
-            alarm = (Alarm) attributes.get(InOutAreaAlarm.key);
-            if (alarm != null) {
+            raw = attributes.get(InOutAreaAlarm.key);
+            if (raw instanceof Alarm) {
+                alarm = (Alarm) raw;
                 alarm.setLocation(t);
                 alarmList.add(alarm);
             }
-            alarm = (Alarm) attributes.get(OverSpeedAlarm.key);
-            if (alarm != null) {
+            raw = attributes.get(OverSpeedAlarm.key);
+            if (raw instanceof Alarm) {
+                alarm = (Alarm) raw;
                 alarm.setLocation(t);
                 alarmList.add(alarm);
             }
-            alarm = (Alarm) attributes.get(RouteDriveTimeAlarm.key);
-            if (alarm != null) {
+            raw = attributes.get(RouteDriveTimeAlarm.key);
+            if (raw instanceof Alarm) {
+                alarm = (Alarm) raw;
                 alarm.setLocation(t);
                 alarmList.add(alarm);
             }
