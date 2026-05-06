@@ -18,6 +18,7 @@ import org.zendo.protocol.t808.T0200;
 import org.zendo.web.config.DiagnosticsProperties;
 import org.zendo.web.model.entity.Device;
 import org.zendo.web.model.entity.DeviceDiagDaily;
+import org.zendo.web.model.entity.DeviceDiagStat;
 import org.zendo.web.model.entity.DeviceStatus;
 import org.zendo.web.repository.DeviceRepository;
 
@@ -31,6 +32,12 @@ import java.util.*;
 @Service
 @RequiredArgsConstructor
 public class DeviceService {
+
+    /**
+     * Keys for alarm types tracked in the {@code dw} map. Add new entries here to
+     * track more types.
+     */
+    private static final List<String> TRACKED_ALARM_KEYS = List.of("v14");
 
     private final DeviceRepository deviceRepository;
     private final MongoTemplate mongoTemplate;
@@ -144,10 +151,12 @@ public class DeviceService {
             mongoTemplate.getConverter().write(status, statusBson);
 
             int gpsTot = 0, gpsBad = 0, sigTot = 0, sigBad = 0;
+            Map<String, int[]> alarmCounts = new HashMap<>();
             for (T0200 t : records) {
                 Map<Integer, Object> attrs = t.getAttributes();
                 Integer gnssCount = attrs != null ? (Integer) attrs.get(AttributeKey.GnssCount) : null;
                 Integer sigStrength = attrs != null ? (Integer) attrs.get(AttributeKey.SignalStrength) : null;
+                Integer videoWarn = attrs != null ? (Integer) attrs.get(AttributeKey.VideoRelatedAlarm) : null;
                 if (gnssCount != null) {
                     gpsTot++;
                     if (gnssCount < props.getSatelliteThreshold())
@@ -157,6 +166,12 @@ public class DeviceService {
                     sigTot++;
                     if (sigStrength < props.getSignalThreshold())
                         sigBad++;
+                }
+                if (videoWarn != null) {
+                    int[] c = alarmCounts.computeIfAbsent("v14", k -> new int[2]);
+                    c[0]++;
+                    if (videoWarn != 0)
+                        c[1]++;
                 }
             }
 
@@ -175,6 +190,11 @@ public class DeviceService {
             }
             if (sigTot > 0) {
                 setDoc.append("ds", buildWindowedCounterExpr("ds", sigTot, sigBad, todayStartBson));
+            }
+            for (Map.Entry<String, int[]> e : alarmCounts.entrySet()) {
+                String path = "dw." + e.getKey();
+                int[] c = e.getValue();
+                setDoc.append(path, buildWindowedCounterExpr(path, c[0], c[1], todayStartBson));
             }
 
             bulk.add(new UpdateOneModel<>(
@@ -201,9 +221,15 @@ public class DeviceService {
         Criteria expiredSig = Criteria.where("ds.ws").lt(todayStartUtc)
                 .and("ds.tot").gt(0);
 
+        List<Criteria> expiredList = new ArrayList<>(List.of(expiredGps, expiredSig));
+        for (String k : TRACKED_ALARM_KEYS) {
+            expiredList.add(Criteria.where("dw." + k + ".ws").lt(todayStartUtc)
+                    .and("dw." + k + ".tot").gt(0));
+        }
+
         List<Device> expired = mongoTemplate.find(
                 Query.query(Criteria.where("mob").in(clientIds)
-                        .orOperator(expiredGps, expiredSig)),
+                        .orOperator(expiredList.toArray(new Criteria[0]))),
                 Device.class);
 
         for (Device d : expired) {
@@ -217,6 +243,7 @@ public class DeviceService {
                     .setDate(summaryDate)
                     .setGps(d.getDiagGps())
                     .setSignal(d.getDiagSig())
+                    .setAlarms(d.getDiagAlarms())
                     .setCreatedAt(LocalDateTime.now(ZoneOffset.UTC));
 
             mongoTemplate.save(summary);
@@ -234,6 +261,12 @@ public class DeviceService {
             ws = d.getDiagGps().getWindowStart();
         else if (d.getDiagSig() != null && d.getDiagSig().getWindowStart() != null)
             ws = d.getDiagSig().getWindowStart();
+        else if (d.getDiagAlarms() != null) {
+            ws = d.getDiagAlarms().values().stream()
+                    .filter(s -> s != null && s.getWindowStart() != null)
+                    .map(DeviceDiagStat::getWindowStart)
+                    .findFirst().orElse(null);
+        }
         if (ws == null)
             return null;
         return ws.atZone(ZoneOffset.UTC).withZoneSameInstant(zone).toLocalDate();

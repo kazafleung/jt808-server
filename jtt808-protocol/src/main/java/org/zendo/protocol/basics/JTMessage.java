@@ -13,7 +13,7 @@ import org.zendo.protocol.commons.MessageId;
 
 /**
  * @author yezhihao
- * https://gitee.com/yezhihao/jt808-server
+ *         https://gitee.com/yezhihao/jt808-server
  */
 @ToString
 @Data
@@ -26,7 +26,7 @@ public class JTMessage implements Message {
     protected int properties;
     @Field(length = 1, desc = "协议版本号", version = 1)
     protected int protocolVersion;
-    @Field(length = 6, charset = "BCD", desc = "终端手机号", version = {-1, 0})
+    @Field(length = 6, charset = "BCD", desc = "终端手机号", version = { -1, 0 })
     @Field(length = 10, charset = "BCD", desc = "终端手机号", version = 1)
     protected String clientId;
     @Field(length = 2, desc = "流水号")
@@ -79,7 +79,8 @@ public class JTMessage implements Message {
     }
 
     public static int reflectMessageId(Class<?> clazz) {
-        io.github.yezhihao.protostar.annotation.Message messageType = clazz.getAnnotation(io.github.yezhihao.protostar.annotation.Message.class);
+        io.github.yezhihao.protostar.annotation.Message messageType = clazz
+                .getAnnotation(io.github.yezhihao.protostar.annotation.Message.class);
         if (messageType != null && messageType.value().length > 0)
             return messageType.value()[0];
         return 0;
@@ -170,7 +171,8 @@ public class JTMessage implements Message {
 
     @Override
     public String toString() {
-        String result = ToStringBuilder.toString(toStringHead(), this, false, "messageId", "clientId", "protocolVersion", "serialNo", "properties", "packageTotal", "packageNo");
+        String result = ToStringBuilder.toString(toStringHead(), this, false, "messageId", "clientId",
+                "protocolVersion", "serialNo", "properties", "packageTotal", "packageNo");
         return result;
     }
 }

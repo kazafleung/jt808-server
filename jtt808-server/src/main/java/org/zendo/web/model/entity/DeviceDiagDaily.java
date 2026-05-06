@@ -9,6 +9,7 @@ import org.springframework.data.mongodb.core.mapping.Field;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.Map;
 
 /**
  * Daily snapshot of a device's GPS and signal quality counters, written once
@@ -43,6 +44,10 @@ public class DeviceDiagDaily {
     /** Signal strength counters for the day. */
     @Field("ds")
     private DeviceDiagStat signal;
+
+    /** Per-type alarm counters for the day (key = alarm type, e.g. "v14"). */
+    @Field("dw")
+    private Map<String, DeviceDiagStat> alarms;
 
     /** When this summary record was written (UTC). */
     @Field("cat")

@@ -9,6 +9,7 @@ import org.springframework.data.mongodb.core.mapping.Document;
 import org.springframework.data.mongodb.core.mapping.Field;
 
 import java.time.LocalDateTime;
+import java.util.Map;
 import java.util.Objects;
 
 @Data
@@ -31,10 +32,6 @@ public class Device {
     @Schema(description = "车牌号")
     @Field("pln")
     private String plateNo;
-
-    @Schema(description = "机构id")
-    @Field("agId")
-    protected int agencyId;
 
     @Schema(description = "司机id(人脸识别)")
     @Field("drId")
@@ -63,6 +60,10 @@ public class Device {
     @Schema(description = "信号强度滚动统计", hidden = true)
     @Field("ds")
     private DeviceDiagStat diagSig;
+
+    @Schema(description = "告警类型滚动统计 (key=告警类型, e.g. \"v14\")", hidden = true)
+    @Field("dw")
+    private Map<String, DeviceDiagStat> diagAlarms;
 
     public void updateStatus(DeviceStatus status) {
         if (this.status == null) {
