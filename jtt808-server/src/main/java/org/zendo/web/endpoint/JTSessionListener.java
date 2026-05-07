@@ -10,6 +10,8 @@ import org.zendo.web.model.entity.Device;
 import org.zendo.web.model.enums.SessionKey;
 import org.zendo.web.service.DeviceService;
 
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.function.BiConsumer;
 
 /**
@@ -64,13 +66,19 @@ public class JTSessionListener implements SessionListener {
     @Override
     public void sessionRegistered(Session session) {
         deviceService.setInstanceUrl(session.getClientId(), instanceUrl);
+        session.setAttribute(SessionKey.OnlineAt, LocalDateTime.now(ZoneOffset.UTC));
     }
 
     /**
-     * 设备离线 — clear the instance URL so the app server knows the device is offline.
+     * 设备离线 — clear the instance URL and accumulate online duration for the day.
      */
     @Override
     public void sessionDestroyed(Session session) {
+        LocalDateTime onlineAt = session.getAttribute(SessionKey.OnlineAt);
+        LocalDateTime offlineAt = LocalDateTime.now(ZoneOffset.UTC);
         deviceService.setInstanceUrl(session.getClientId(), null);
+        if (onlineAt != null) {
+            deviceService.recordSessionEnd(session.getClientId(), onlineAt, offlineAt);
+        }
     }
 }

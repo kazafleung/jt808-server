@@ -26,6 +26,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
+import java.time.temporal.ChronoUnit;
 import java.util.*;
 
 @Slf4j
@@ -41,6 +42,7 @@ public class DeviceService {
 
     private final DeviceRepository deviceRepository;
     private final MongoTemplate mongoTemplate;
+    private final DiagnosticsProperties diagnosticsProperties;
 
     /**
      * Upsert device on T0100 registration.
@@ -83,9 +85,14 @@ public class DeviceService {
      * Called on sessionRegistered (set) and sessionDestroyed (clear).
      */
     public void setInstanceUrl(String mobileNo, String instanceUrl) {
-        Update update = instanceUrl != null
+        boolean isOnline = instanceUrl != null;
+        Update update = isOnline
                 ? new Update().set("iurl", instanceUrl)
-                : new Update().unset("iurl");
+                        .set("online", true)
+                        .set("onlineAt", LocalDateTime.now(ZoneOffset.UTC))
+                : new Update().unset("iurl")
+                        .set("online", false)
+                        .set("offlineAt", LocalDateTime.now(ZoneOffset.UTC));
         mongoTemplate.updateFirst(
                 Query.query(Criteria.where("mob").is(mobileNo)),
                 update,
@@ -93,7 +100,30 @@ public class DeviceService {
     }
 
     /**
-     * Unified write: advances the device status snapshot AND increments the
+     * Accumulates the duration of a completed TCP session into the device's
+     * calendar-day online-time counter ({@code ol}). Flushes an expired window
+     * to {@link DeviceDiagDaily} before accumulating, following the same pattern
+     * as GPS/signal diagnostics.
+     */
+    public void recordSessionEnd(String mobileNo, LocalDateTime onlineAt, LocalDateTime offlineAt) {
+        long durationSec = Math.max(0, ChronoUnit.SECONDS.between(onlineAt, offlineAt));
+        if (durationSec == 0)
+            return;
+
+        ZoneId zone = ZoneId.of(diagnosticsProperties.getWindowZone());
+        LocalDateTime todayStartUtc = LocalDate.now(zone)
+                .atStartOfDay(zone).withZoneSameInstant(ZoneOffset.UTC).toLocalDateTime();
+
+        writeDailySummaries(List.of(mobileNo), todayStartUtc, zone);
+
+        Date todayStartBson = Date.from(todayStartUtc.toInstant(ZoneOffset.UTC));
+        mongoTemplate.getDb().getCollection("devices").updateOne(
+                Filters.eq("mob", mobileNo),
+                List.of(new Document("$set",
+                        new Document("ol", buildOnlineCounterExpr(durationSec, todayStartBson)))));
+    }
+
+    /**
      * calendar-day diagnostic counters in a single MongoDB bulkWrite.
      *
      * <p>
@@ -226,6 +256,8 @@ public class DeviceService {
             expiredList.add(Criteria.where("dw." + k + ".ws").lt(todayStartUtc)
                     .and("dw." + k + ".tot").gt(0));
         }
+        expiredList.add(Criteria.where("ol.ws").lt(todayStartUtc)
+                .and("ol.sec").gt(0));
 
         List<Device> expired = mongoTemplate.find(
                 Query.query(Criteria.where("mob").in(clientIds)
@@ -244,6 +276,7 @@ public class DeviceService {
                     .setGps(d.getDiagGps())
                     .setSignal(d.getDiagSig())
                     .setAlarms(d.getDiagAlarms())
+                    .setOnline(d.getDiagOnline())
                     .setCreatedAt(LocalDateTime.now(ZoneOffset.UTC));
 
             mongoTemplate.save(summary);
@@ -267,6 +300,8 @@ public class DeviceService {
                     .map(DeviceDiagStat::getWindowStart)
                     .findFirst().orElse(null);
         }
+        if (ws == null && d.getDiagOnline() != null)
+            ws = d.getDiagOnline().getWindowStart();
         if (ws == null)
             return null;
         return ws.atZone(ZoneOffset.UTC).withZoneSameInstant(zone).toLocalDate();
@@ -307,6 +342,20 @@ public class DeviceService {
                 .append("bad", newBad)
                 .append("ratio", newRatio);
 
+        return new Document("$cond", Arrays.asList(isExpired, resetDoc, incrDoc));
+    }
+
+    /**
+     * Builds the aggregation-pipeline expression for the online-time counter:
+     * resets to {@code {ws: todayStart, sec: durationSec}} when the window has
+     * expired; otherwise increments {@code sec} in-place.
+     */
+    private static Document buildOnlineCounterExpr(long durationSec, Date todayStart) {
+        Document wsOrEpoch = new Document("$ifNull", Arrays.asList("$ol.ws", new Date(0)));
+        Document isExpired = new Document("$lt", Arrays.asList(wsOrEpoch, todayStart));
+        Document resetDoc = new Document("ws", todayStart).append("sec", durationSec);
+        Document incrDoc = new Document("ws", "$ol.ws")
+                .append("sec", new Document("$add", Arrays.asList("$ol.sec", durationSec)));
         return new Document("$cond", Arrays.asList(isExpired, resetDoc, incrDoc));
     }
 }

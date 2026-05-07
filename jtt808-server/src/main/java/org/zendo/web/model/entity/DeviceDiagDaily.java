@@ -49,6 +49,10 @@ public class DeviceDiagDaily {
     @Field("dw")
     private Map<String, DeviceDiagStat> alarms;
 
+    /** Online time for the day. */
+    @Field("ol")
+    private DeviceOnlineStat online;
+
     /** When this summary record was written (UTC). */
     @Field("cat")
     private LocalDateTime createdAt;

@@ -53,6 +53,18 @@ public class Device {
     @Field("iurl")
     private String instanceUrl;
 
+    @Schema(description = "是否在线")
+    @Field("online")
+    private boolean online;
+
+    @Schema(description = "最近上线时间 (UTC)")
+    @Field("onlineAt")
+    private LocalDateTime onlineAt;
+
+    @Schema(description = "最近离线时间 (UTC)")
+    @Field("offlineAt")
+    private LocalDateTime offlineAt;
+
     @Schema(description = "GPS质量滚动统计（卫星数）", hidden = true)
     @Field("dg")
     private DeviceDiagStat diagGps;
@@ -64,6 +76,10 @@ public class Device {
     @Schema(description = "告警类型滚动统计 (key=告警类型, e.g. \"v14\")", hidden = true)
     @Field("dw")
     private Map<String, DeviceDiagStat> diagAlarms;
+
+    @Schema(description = "每日在线时长统计（秒）", hidden = true)
+    @Field("ol")
+    private DeviceOnlineStat diagOnline;
 
     public void updateStatus(DeviceStatus status) {
         if (this.status == null) {

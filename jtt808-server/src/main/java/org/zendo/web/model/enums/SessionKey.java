@@ -2,9 +2,15 @@ package org.zendo.web.model.enums;
 
 /**
  * @author yezhihao
- * https://gitee.com/yezhihao/jt808-server
+ *         https://gitee.com/yezhihao/jt808-server
  */
 public enum SessionKey {
 
-    Device
+    Device,
+
+    /**
+     * Timestamp (UTC) when the current TCP session was registered, for
+     * online-duration tracking.
+     */
+    OnlineAt
 }
