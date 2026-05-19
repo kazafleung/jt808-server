@@ -28,6 +28,9 @@ import org.zendo.web.model.entity.DeviceFileRequest;
 import org.zendo.web.repository.DeviceFileRequestRepository;
 
 import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 
 /**
@@ -56,6 +59,7 @@ public class DeviceFileRequestWatchService implements SmartLifecycle {
 
     private static final String COLLECTION = "devicefilerequests";
     private static final long RECONNECT_DELAY_MS = 5_000;
+    private static final ZoneId HK = ZoneId.of("Asia/Hong_Kong");
 
     private final MongoTemplate mongoTemplate;
     private final SessionManager sessionManager;
@@ -236,7 +240,7 @@ public class DeviceFileRequestWatchService implements SmartLifecycle {
                 .subscribe(
                         resp -> {
                             String serialNo = String.valueOf(cmd.getSerialNo());
-                            String url = buildFtpUrl(cmd);
+                            String url = buildFtpUrl(cmd, request);
                             log.info("T9206 succeeded: id={} cid={} serialNo={}",
                                     request.getId(), request.getCid(), serialNo);
                             markRequested(request.getId(), serialNo, url);
@@ -277,9 +281,11 @@ public class DeviceFileRequestWatchService implements SmartLifecycle {
         T9206 cmd = jtProperties.newT9206();
         cmd.setClientId(request.getCid());
         cmd.setChannelNo(request.getChannel() != null ? request.getChannel() : 0);
-        cmd.setStartTime(
-                request.getStartTime() != null ? request.getStartTime() : LocalDateTime.of(2000, 1, 1, 0, 0, 0));
-        cmd.setEndTime(request.getEndTime() != null ? request.getEndTime() : LocalDateTime.now());
+        LocalDateTime start = request.getStartTime() != null ? request.getStartTime()
+                : LocalDateTime.of(2000, 1, 1, 0, 0, 0);
+        LocalDateTime end = request.getEndTime() != null ? request.getEndTime() : LocalDateTime.now(ZoneOffset.UTC);
+        cmd.setStartTime(start.atZone(ZoneOffset.UTC).withZoneSameInstant(HK).toLocalDateTime());
+        cmd.setEndTime(end.atZone(ZoneOffset.UTC).withZoneSameInstant(HK).toLocalDateTime());
         cmd.setPath("/" + request.getCid() + "/videos");
         cmd.setWarnBit1(0);
         cmd.setWarnBit2(0);
@@ -290,8 +296,27 @@ public class DeviceFileRequestWatchService implements SmartLifecycle {
         return cmd;
     }
 
-    private String buildFtpUrl(T9206 cmd) {
-        return "ftp://" + cmd.getIp() + ":" + cmd.getPort() + cmd.getPath();
+    private String buildFtpUrl(T9206 cmd, DeviceFileRequest request) {
+        String base = cmd.getPath();
+        String manufacturer = request.getManufacturer();
+        if ("Tongli".equalsIgnoreCase(manufacturer)) {
+            DateTimeFormatter fmt = DateTimeFormatter.ofPattern("yyMMddHHmmss");
+            String filename = "ch" + cmd.getChannelNo()
+                    + "_" + cmd.getStartTime().format(fmt)
+                    + "_" + cmd.getEndTime().format(fmt)
+                    + ".avi";
+            return base + "/" + filename;
+        }
+        if ("Citops".equalsIgnoreCase(manufacturer)) {
+            DateTimeFormatter fmt = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
+            String filename = request.getCid()
+                    + "-" + cmd.getChannelNo()
+                    + "-" + cmd.getStartTime().format(fmt)
+                    + "-" + cmd.getEndTime().format(fmt)
+                    + ".h264";
+            return base + "/" + filename;
+        }
+        return base;
     }
 
     /**

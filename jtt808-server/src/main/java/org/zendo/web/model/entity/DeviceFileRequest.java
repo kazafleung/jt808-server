@@ -42,6 +42,9 @@ public class DeviceFileRequest {
     @Indexed
     private String deviceId;
 
+    @Schema(description = "厂商")
+    private String manufacturer;
+
     @Schema(description = "请求类型: LOG | IMAGE | VIDEO")
     private Type type;
 
