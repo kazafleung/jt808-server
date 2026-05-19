@@ -67,7 +67,7 @@ public class DeviceFileRequestWatchService implements SmartLifecycle {
     public DeviceFileRequestWatchService(
             MongoTemplate mongoTemplate,
             @Lazy SessionManager sessionManager,
-            MessageManager messageManager,
+            @Lazy MessageManager messageManager,
             JTProperties jtProperties,
             DeviceFileRequestRepository fileRequestRepository) {
         this.mongoTemplate = mongoTemplate;
