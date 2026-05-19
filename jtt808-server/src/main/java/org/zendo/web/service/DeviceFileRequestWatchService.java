@@ -296,8 +296,8 @@ public class DeviceFileRequestWatchService implements SmartLifecycle {
                                 mongoTemplate.updateFirst(
                                         Query.query(Criteria.where("_id").is(req.getId())),
                                         new Update()
-                                                .set("st", DeviceFileRequest.Status.COMPLETED.name())
-                                                .set("doneAt", LocalDateTime.now()),
+                                                .set("status", DeviceFileRequest.Status.COMPLETED.name())
+                                                .set("completedAt", LocalDateTime.now()),
                                         DeviceFileRequest.class);
                             } else {
                                 log.warn("T1206 failure reported by device: id={} cid={} serialNo={}", req.getId(), cid,
@@ -314,10 +314,10 @@ public class DeviceFileRequestWatchService implements SmartLifecycle {
         mongoTemplate.updateFirst(
                 Query.query(Criteria.where("_id").is(id)),
                 new Update()
-                        .set("st", DeviceFileRequest.Status.REQUESTED.name())
-                        .set("sno", serialNo)
+                        .set("status", DeviceFileRequest.Status.REQUESTED.name())
+                        .set("serialNo", serialNo)
                         .set("url", url)
-                        .set("reqAt", LocalDateTime.now()),
+                        .set("requestedAt", LocalDateTime.now()),
                 DeviceFileRequest.class);
     }
 
@@ -325,7 +325,7 @@ public class DeviceFileRequestWatchService implements SmartLifecycle {
         mongoTemplate.updateFirst(
                 Query.query(Criteria.where("_id").is(id)),
                 new Update()
-                        .set("st", DeviceFileRequest.Status.FAILED.name())
+                        .set("status", DeviceFileRequest.Status.FAILED.name())
                         .set("failReason", reason),
                 DeviceFileRequest.class);
     }

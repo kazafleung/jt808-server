@@ -40,47 +40,36 @@ public class DeviceFileRequest {
 
     @Schema(description = "设备ObjectId引用")
     @Indexed
-    @Field("did")
     private String deviceId;
 
-    @Schema(description = "请求类型: log | image | video")
-    @Field("type")
+    @Schema(description = "请求类型: LOG | IMAGE | VIDEO")
     private Type type;
 
-    @Schema(description = "状态: pending | requested | completed | failed")
-    @Field("st")
+    @Schema(description = "状态: PENDING | REQUESTED | COMPLETED | FAILED")
     private Status status = Status.PENDING;
 
     @Schema(description = "失败原因")
-    @Field("failReason")
     private String failReason;
 
     @Schema(description = "流水号 (平台下发指令序列号)")
-    @Field("sno")
     private String serialNo;
 
     @Schema(description = "通道ID")
-    @Field("cho")
     private Integer channel;
 
     @Schema(description = "起始时间")
-    @Field("sTime")
     private LocalDateTime startTime;
 
     @Schema(description = "结束时间")
-    @Field("eTime")
     private LocalDateTime endTime;
 
     @Schema(description = "文件URL (完成后填入)")
-    @Field("url")
     private String url;
 
     @Schema(description = "命令下发时间")
-    @Field("reqAt")
     private LocalDateTime requestedAt;
 
     @Schema(description = "完成时间")
-    @Field("doneAt")
     private LocalDateTime completedAt;
 
     @CreatedDate
