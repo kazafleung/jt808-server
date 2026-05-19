@@ -7,10 +7,11 @@ import com.mongodb.client.model.changestream.ChangeStreamDocument;
 import com.mongodb.client.model.changestream.FullDocument;
 import io.github.yezhihao.netmc.session.Session;
 import io.github.yezhihao.netmc.session.SessionManager;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.bson.Document;
 import org.bson.conversions.Bson;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.context.SmartLifecycle;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.query.Criteria;
@@ -51,7 +52,6 @@ import java.util.List;
  */
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class DeviceFileRequestWatchService implements SmartLifecycle {
 
     private static final String COLLECTION = "device_file_requests";
@@ -62,6 +62,20 @@ public class DeviceFileRequestWatchService implements SmartLifecycle {
     private final MessageManager messageManager;
     private final JTProperties jtProperties;
     private final DeviceFileRequestRepository fileRequestRepository;
+
+    @Autowired
+    public DeviceFileRequestWatchService(
+            MongoTemplate mongoTemplate,
+            @Lazy SessionManager sessionManager,
+            MessageManager messageManager,
+            JTProperties jtProperties,
+            DeviceFileRequestRepository fileRequestRepository) {
+        this.mongoTemplate = mongoTemplate;
+        this.sessionManager = sessionManager;
+        this.messageManager = messageManager;
+        this.jtProperties = jtProperties;
+        this.fileRequestRepository = fileRequestRepository;
+    }
 
     private volatile boolean running = false;
     private volatile MongoCursor<?> activeCursor;
