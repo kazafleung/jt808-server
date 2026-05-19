@@ -151,6 +151,8 @@ public class DeviceFileRequestWatchService implements SmartLifecycle {
                 if (fullDoc != null) {
                     DeviceFileRequest request = mongoTemplate.getConverter()
                             .read(DeviceFileRequest.class, fullDoc);
+                    log.info("Change stream insert received: id={} cid={} type={} status={}",
+                            request.getId(), request.getCid(), request.getType(), request.getStatus());
                     handleRequest(request);
                 }
             }
@@ -185,13 +187,13 @@ public class DeviceFileRequestWatchService implements SmartLifecycle {
         // Only handle devices whose TCP session is on this server instance
         Session deviceSession = sessionManager.get(cid);
         if (deviceSession == null) {
-            log.debug("Device cid={} is not connected to this instance — ignoring file request {}", cid,
+            log.warn("Device cid={} is not connected to this instance — ignoring file request {}", cid,
                     request.getId());
             return;
         }
 
         if (request.getStatus() != DeviceFileRequest.Status.PENDING) {
-            log.debug("File request {} is not pending (status={}) — skipping", request.getId(), request.getStatus());
+            log.warn("File request {} is not pending (status={}) — skipping", request.getId(), request.getStatus());
             return;
         }
 
