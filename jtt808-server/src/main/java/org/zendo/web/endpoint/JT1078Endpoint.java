@@ -3,17 +3,22 @@ package org.zendo.web.endpoint;
 import io.github.yezhihao.netmc.core.annotation.Endpoint;
 import io.github.yezhihao.netmc.core.annotation.Mapping;
 import io.github.yezhihao.netmc.session.Session;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 import org.zendo.protocol.t1078.T1003;
 import org.zendo.protocol.t1078.T1005;
 import org.zendo.protocol.t1078.T1205;
 import org.zendo.protocol.t1078.T1206;
+import org.zendo.web.service.DeviceFileRequestWatchService;
 
 import static org.zendo.protocol.commons.JT1078.*;
 
 @Endpoint
 @Component
+@RequiredArgsConstructor
 public class JT1078Endpoint {
+
+    private final DeviceFileRequestWatchService fileRequestWatchService;
 
     @Mapping(types = 终端上传音视频资源列表, desc = "终端上传音视频资源列表")
     public void T1205(T1205 message, Session session) {
@@ -28,6 +33,7 @@ public class JT1078Endpoint {
     @Mapping(types = 文件上传完成通知, desc = "文件上传完成通知")
     public void T1206(T1206 message, Session session) {
         session.response(message);
+        fileRequestWatchService.onFileUploadComplete(message);
     }
 
     @Mapping(types = 终端上传乘客流量, desc = "终端上传乘客流量")

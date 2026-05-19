@@ -8,6 +8,7 @@ import org.springframework.stereotype.Component;
 import org.zendo.protocol.basics.JTMessage;
 import org.zendo.web.model.entity.Device;
 import org.zendo.web.model.enums.SessionKey;
+import org.zendo.web.service.DeviceFileRequestWatchService;
 import org.zendo.web.service.DeviceService;
 
 import java.time.LocalDateTime;
@@ -22,11 +23,14 @@ import java.util.function.BiConsumer;
 public class JTSessionListener implements SessionListener {
 
     private final DeviceService deviceService;
+    private final DeviceFileRequestWatchService fileRequestWatchService;
     private final String instanceUrl;
 
     public JTSessionListener(DeviceService deviceService,
+            DeviceFileRequestWatchService fileRequestWatchService,
             @Value("${instance.url}") String instanceUrl) {
         this.deviceService = deviceService;
+        this.fileRequestWatchService = fileRequestWatchService;
         this.instanceUrl = instanceUrl;
     }
 
@@ -67,6 +71,7 @@ public class JTSessionListener implements SessionListener {
     public void sessionRegistered(Session session) {
         deviceService.setInstanceUrl(session.getClientId(), instanceUrl);
         session.setAttribute(SessionKey.OnlineAt, LocalDateTime.now(ZoneOffset.UTC));
+        fileRequestWatchService.processPendingRequests(session.getClientId());
     }
 
     /**
