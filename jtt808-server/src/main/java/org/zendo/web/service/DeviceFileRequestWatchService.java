@@ -54,7 +54,7 @@ import java.util.List;
 @Service
 public class DeviceFileRequestWatchService implements SmartLifecycle {
 
-    private static final String COLLECTION = "device_file_requests";
+    private static final String COLLECTION = "devicefilerequests";
     private static final long RECONNECT_DELAY_MS = 5_000;
 
     private final MongoTemplate mongoTemplate;

@@ -27,7 +27,7 @@ import java.time.LocalDateTime;
  */
 @Data
 @Accessors(chain = true)
-@Document(collection = "device_file_requests")
+@Document(collection = "devicefilerequests")
 public class DeviceFileRequest {
 
     @Id
