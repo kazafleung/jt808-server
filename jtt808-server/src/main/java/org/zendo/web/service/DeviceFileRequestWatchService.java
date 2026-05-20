@@ -309,7 +309,8 @@ public class DeviceFileRequestWatchService implements SmartLifecycle {
         }
         if ("Citops".equalsIgnoreCase(manufacturer)) {
             DateTimeFormatter fmt = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
-            String filename = request.getCid()
+            String paddedCid = String.format("%011d", Long.parseLong(request.getCid()));
+            String filename = paddedCid
                     + "-" + cmd.getChannelNo()
                     + "-" + cmd.getStartTime().format(fmt)
                     + "-" + cmd.getEndTime().format(fmt)
