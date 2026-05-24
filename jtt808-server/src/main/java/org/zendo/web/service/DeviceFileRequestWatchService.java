@@ -378,13 +378,16 @@ public class DeviceFileRequestWatchService implements SmartLifecycle {
     }
 
     private void markRequested(String id, String serialNo, String url) {
+        Update update = new Update()
+                .set("status", DeviceFileRequest.Status.REQUESTED.name())
+                .set("requestedAt", LocalDateTime.now());
+        if (serialNo != null)
+            update.set("serialNo", serialNo);
+        if (url != null)
+            update.set("url", url);
         mongoTemplate.updateFirst(
                 Query.query(Criteria.where("_id").is(id)),
-                new Update()
-                        .set("status", DeviceFileRequest.Status.REQUESTED.name())
-                        .set("serialNo", serialNo)
-                        .set("url", url)
-                        .set("requestedAt", LocalDateTime.now()),
+                update,
                 DeviceFileRequest.class);
     }
 
