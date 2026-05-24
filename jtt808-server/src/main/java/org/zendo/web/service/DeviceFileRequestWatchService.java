@@ -19,6 +19,7 @@ import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.data.mongodb.core.query.Update;
 import org.springframework.stereotype.Service;
 import org.zendo.protocol.t808.T0001;
+import org.zendo.protocol.t808.T8300;
 import org.zendo.protocol.t808.T8803;
 import org.zendo.protocol.t1078.T1206;
 import org.zendo.protocol.t1078.T9206;
@@ -253,13 +254,37 @@ public class DeviceFileRequestWatchService implements SmartLifecycle {
     }
 
     /**
-     * TODO: Implement log file retrieval when the log-upload protocol class
-     * (e.g. T8700) is available. For now the request is immediately marked failed.
+     * Sends T8300 (文本信息下发) carrying a {@code $LOGUPLOAD} command to Tongli
+     * devices, instructing the terminal to push its log files to the FTP server.
+     * Only Tongli devices are currently supported.
      */
     private void handleLogRequest(DeviceFileRequest request) {
-        log.warn("Log file request id={} cid={} — log upload command not yet implemented", request.getId(),
-                request.getCid());
-        markFailed(request.getId(), "Log upload command not yet implemented");
+        if (!"Tongli".equalsIgnoreCase(request.getManufacturer())) {
+            log.warn("Log file request id={} cid={} — log upload only supported for Tongli devices (manufacturer={})",
+                    request.getId(), request.getCid(), request.getManufacturer());
+            markFailed(request.getId(), "Log upload not supported for manufacturer: " + request.getManufacturer());
+            return;
+        }
+
+        JTProperties.C9206 ftp = jtProperties.getT9206();
+        T8300 cmd = new T8300();
+        cmd.setClientId(request.getCid());
+        cmd.setSign(0);
+        cmd.setType(0);
+        cmd.setContent("$LOGUPLOAD," + ftp.getHost() + "," + ftp.getPort() + "," + ftp.getUsername() + ","
+                + ftp.getPassword());
+
+        messageManager.request(cmd, T0001.class)
+                .subscribe(
+                        resp -> {
+                            log.info("T8300 log upload succeeded: id={} cid={}", request.getId(), request.getCid());
+                            markRequested(request.getId(), null, null);
+                        },
+                        err -> {
+                            log.warn("T8300 log upload failed: id={} cid={} — {}", request.getId(), request.getCid(),
+                                    err.getMessage());
+                            markFailed(request.getId(), err.getMessage());
+                        });
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
