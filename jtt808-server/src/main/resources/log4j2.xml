@@ -19,7 +19,7 @@
             </Policies>
             <DefaultRolloverStrategy max="10">
                 <Delete basePath="${LOG_HOME}/jt808" maxDepth="2">
-                    <IfLastModified age="30d" />
+                    <IfLastModified age="3d" />
                 </Delete>
             </DefaultRolloverStrategy>
         </RollingRandomAccessFile>
@@ -32,7 +32,7 @@
             </Policies>
             <DefaultRolloverStrategy max="10">
                 <Delete basePath="${LOG_HOME}/jt808" maxDepth="1">
-                    <IfLastModified age="30d" />
+                    <IfLastModified age="3d" />
                 </Delete>
             </DefaultRolloverStrategy>
         </RollingRandomAccessFile>

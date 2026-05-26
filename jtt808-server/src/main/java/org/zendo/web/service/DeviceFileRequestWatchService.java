@@ -225,7 +225,7 @@ public class DeviceFileRequestWatchService implements SmartLifecycle {
                         err -> {
                             log.warn("T8803 failed: id={} cid={} — {}", request.getId(), request.getCid(),
                                     err.getMessage());
-                            markFailed(request.getId(), err.getMessage());
+                            markFailed(request.getId(), err.toString());
                         });
     }
 
@@ -249,7 +249,7 @@ public class DeviceFileRequestWatchService implements SmartLifecycle {
                         err -> {
                             log.warn("T9206 failed: id={} cid={} — {}", request.getId(), request.getCid(),
                                     err.getMessage());
-                            markFailed(request.getId(), err.getMessage());
+                            markFailed(request.getId(), err.toString());
                         });
     }
 
@@ -283,7 +283,7 @@ public class DeviceFileRequestWatchService implements SmartLifecycle {
                         err -> {
                             log.warn("T8300 log upload failed: id={} cid={} — {}", request.getId(), request.getCid(),
                                     err.getMessage());
-                            markFailed(request.getId(), err.getMessage());
+                            markFailed(request.getId(), err.toString());
                         });
     }
 

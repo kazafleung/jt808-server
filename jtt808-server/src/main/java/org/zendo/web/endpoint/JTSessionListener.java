@@ -13,6 +13,7 @@ import org.zendo.web.service.DeviceService;
 
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
+import java.util.concurrent.CompletableFuture;
 import java.util.function.BiConsumer;
 
 /**
@@ -71,7 +72,19 @@ public class JTSessionListener implements SessionListener {
     public void sessionRegistered(Session session) {
         deviceService.setInstanceUrl(session.getClientId(), instanceUrl);
         session.setAttribute(SessionKey.OnlineAt, LocalDateTime.now(ZoneOffset.UTC));
-        fileRequestWatchService.processPendingRequests(session.getClientId());
+        // Run asynchronously with a short delay so the T8003 auth ACK is fully
+        // sent to the device before we attempt to dispatch pending commands.
+        // Sending commands synchronously during sessionRegistered would queue
+        // them in Netty before the auth ACK, causing the device to ignore them.
+        String cid = session.getClientId();
+        CompletableFuture.runAsync(() -> {
+            try {
+                Thread.sleep(1_000);
+            } catch (InterruptedException ignored) {
+                Thread.currentThread().interrupt();
+            }
+            fileRequestWatchService.processPendingRequests(cid);
+        });
     }
 
     /**
