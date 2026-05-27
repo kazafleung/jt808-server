@@ -33,6 +33,8 @@ import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Watches the {@code device_file_requests} collection for newly-inserted
@@ -61,6 +63,8 @@ public class DeviceFileRequestWatchService implements SmartLifecycle {
     private static final String COLLECTION = "devicefilerequests";
     private static final long RECONNECT_DELAY_MS = 5_000;
     private static final ZoneId HK = ZoneId.of("Asia/Hong_Kong");
+    private static final DateTimeFormatter LOG_MINUTE_FMT = DateTimeFormatter.ofPattern("yyyyMMddHHmm");
+    private static final Pattern LOG_URL_PATTERN = Pattern.compile("^(.*)_(\\d{12})(\\*\\*LOG\\.tar\\.gz)$");
 
     private final MongoTemplate mongoTemplate;
     private final SessionManager sessionManager;
@@ -277,8 +281,10 @@ public class DeviceFileRequestWatchService implements SmartLifecycle {
         messageManager.request(cmd, T0001.class)
                 .subscribe(
                         resp -> {
-                            log.info("T8300 log upload succeeded: id={} cid={}", request.getId(), request.getCid());
-                            markRequested(request.getId(), null, null);
+                            String logPattern = normalizeLogUrlPattern(request.getUrl());
+                            log.info("T8300 log upload succeeded: id={} cid={} urlPattern={}",
+                                    request.getId(), request.getCid(), logPattern);
+                            markRequested(request.getId(), null, logPattern);
                         },
                         err -> {
                             log.warn("T8300 log upload failed: id={} cid={} — {}", request.getId(), request.getCid(),
@@ -343,6 +349,23 @@ public class DeviceFileRequestWatchService implements SmartLifecycle {
             return base + "/" + filename;
         }
         return base;
+    }
+
+    private String normalizeLogUrlPattern(String urlPattern) {
+        if (urlPattern == null || urlPattern.isBlank()) {
+            return null;
+        }
+        Matcher matcher = LOG_URL_PATTERN.matcher(urlPattern);
+        if (!matcher.matches()) {
+            return urlPattern;
+        }
+
+        String currentMinute = LocalDateTime.now(HK).format(LOG_MINUTE_FMT);
+        String patternMinute = matcher.group(2);
+        if (currentMinute.equals(patternMinute)) {
+            return urlPattern;
+        }
+        return matcher.group(1) + "_" + currentMinute + matcher.group(3);
     }
 
     /**
