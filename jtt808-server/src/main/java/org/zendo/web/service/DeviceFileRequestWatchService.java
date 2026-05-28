@@ -276,7 +276,7 @@ public class DeviceFileRequestWatchService implements SmartLifecycle {
         cmd.setSign(0);
         cmd.setType(0);
         cmd.setContent("$LOGUPLOAD," + ftp.getHost() + "," + ftp.getPort() + "," + ftp.getUsername() + ","
-                + ftp.getPassword());
+                + ftp.getPassword() + "," + "/logs");
 
         messageManager.request(cmd, T0001.class)
                 .subscribe(
