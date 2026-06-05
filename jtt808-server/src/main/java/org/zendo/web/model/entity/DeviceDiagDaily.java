@@ -53,6 +53,10 @@ public class DeviceDiagDaily {
     @Field("ol")
     private DeviceOnlineStat online;
 
+    /** Mileage for the day. */
+    @Field("ml")
+    private DeviceMileageStat mileage;
+
     /** When this summary record was written (UTC). */
     @Field("cat")
     private LocalDateTime createdAt;

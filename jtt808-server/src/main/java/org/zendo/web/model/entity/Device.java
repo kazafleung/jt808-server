@@ -81,6 +81,10 @@ public class Device {
     @Field("ol")
     private DeviceOnlineStat diagOnline;
 
+    @Schema(description = "每日里程统计（米）", hidden = true)
+    @Field("ml")
+    private DeviceMileageStat diagMileage;
+
     public void updateStatus(DeviceStatus status) {
         if (this.status == null) {
             this.status = status;

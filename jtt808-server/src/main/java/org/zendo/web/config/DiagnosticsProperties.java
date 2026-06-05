@@ -17,9 +17,9 @@ public class DiagnosticsProperties {
 
     /**
      * Timezone used to determine the calendar-day boundary for GPS / signal
-     * quality windows. Defaults to UTC. Use IANA zone IDs, e.g. "Asia/Hong_Kong".
+     * quality windows. Defaults to Asia/Hong_Kong. Use IANA zone IDs.
      */
-    private String windowZone = "UTC";
+    private String windowZone = "Asia/Hong_Kong";
 
     /**
      * GNSS satellite count below this value is considered a "bad" location fix.

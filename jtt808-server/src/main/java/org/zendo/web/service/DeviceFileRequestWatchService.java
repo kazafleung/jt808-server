@@ -65,6 +65,7 @@ public class DeviceFileRequestWatchService implements SmartLifecycle {
     private static final ZoneId HK = ZoneId.of("Asia/Hong_Kong");
     private static final DateTimeFormatter LOG_MINUTE_FMT = DateTimeFormatter.ofPattern("yyyyMMddHHmm");
     private static final Pattern LOG_URL_PATTERN = Pattern.compile("^(.*)_(\\d{12})(\\*\\*LOG\\.tar\\.gz)$");
+    private static final Pattern API_ERROR_CODE_PATTERN = Pattern.compile("code=(\\d+)");
 
     private final MongoTemplate mongoTemplate;
     private final SessionManager sessionManager;
@@ -289,7 +290,7 @@ public class DeviceFileRequestWatchService implements SmartLifecycle {
                         err -> {
                             log.warn("T8300 log upload failed: id={} cid={} — {}", request.getId(), request.getCid(),
                                     err.getMessage());
-                            markFailed(request.getId(), err.toString());
+                            markFailed(request.getId(), resolveLogFailReason(err));
                         });
     }
 
@@ -366,6 +367,33 @@ public class DeviceFileRequestWatchService implements SmartLifecycle {
             return urlPattern;
         }
         return matcher.group(1) + "_" + currentMinute + matcher.group(3);
+    }
+
+    private String resolveLogFailReason(Throwable err) {
+        Integer code = extractLastApiErrorCode(err);
+        if (code == null) {
+            return "Log upload request failed";
+        }
+
+        return switch (code) {
+            case 4002 -> "Device has no response";
+            case 4001 -> "Message send failed";
+            default -> "Log upload request failed (code=" + code + ")";
+        };
+    }
+
+    private Integer extractLastApiErrorCode(Throwable err) {
+        Integer lastCode = null;
+        Throwable current = err;
+        while (current != null) {
+            String message = current.toString();
+            Matcher matcher = API_ERROR_CODE_PATTERN.matcher(message);
+            while (matcher.find()) {
+                lastCode = Integer.parseInt(matcher.group(1));
+            }
+            current = current.getCause();
+        }
+        return lastCode;
     }
 
     /**

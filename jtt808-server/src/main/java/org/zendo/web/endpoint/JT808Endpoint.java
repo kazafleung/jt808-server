@@ -62,17 +62,29 @@ public class JT808Endpoint {
 
     @Mapping(types = 终端注册, desc = "终端注册")
     public T8100 T0100(T0100 message, Session session) {
+        T8100 result = new T8100();
+        result.setResponseSerialNo(message.getSerialNo());
+
+        // Only allow devices that already exist in the database
+        Device device = deviceService.findByMobileNo(message.getClientId())
+                .orElse(null);
+
+        if (device == null) {
+            log.warn("Device registration rejected - device not found in database: mobileNo={}",
+                    message.getClientId());
+            result.setResultCode(T8100.NotFoundTerminal);
+            return result;
+        }
+
         session.register(message);
-        Device device = new Device();
+
+        // Update existing device information
         device.setProtocolVersion(message.getProtocolVersion());
-        device.setMobileNo(message.getClientId());
         device.setDeviceId(message.getDeviceId());
         device.setPlateNo(message.getPlateNo());
         Device saved = deviceService.saveOrUpdate(device);
         session.setAttribute(SessionKey.Device, saved);
 
-        T8100 result = new T8100();
-        result.setResponseSerialNo(message.getSerialNo());
         result.setToken(message.getDeviceId() + "," + message.getPlateNo());
         result.setResultCode(T8100.Success);
         return result;
@@ -80,26 +92,24 @@ public class JT808Endpoint {
 
     @Mapping(types = 终端鉴权, desc = "终端鉴权")
     public T0001 T0102(T0102 message, Session session) {
-        session.register(message);
-        String[] token = message.getToken().split(",");
-        String deviceId = token[0];
-        String plateNo = token.length > 1 ? token[1] : null;
-
-        Device device = deviceService.findByMobileNo(message.getClientId())
-                .orElseGet(() -> {
-                    // Device not in DB yet (e.g. registered before MongoDB was added)
-                    Device d = new Device();
-                    d.setProtocolVersion(message.getProtocolVersion());
-                    d.setMobileNo(message.getClientId());
-                    d.setDeviceId(deviceId);
-                    d.setPlateNo(plateNo);
-                    return deviceService.saveOrUpdate(d);
-                });
-        session.setAttribute(SessionKey.Device, device);
-
         T0001 result = new T0001();
         result.setResponseSerialNo(message.getSerialNo());
         result.setResponseMessageId(message.getMessageId());
+
+        // Only allow devices that already exist in the database
+        Device device = deviceService.findByMobileNo(message.getClientId())
+                .orElse(null);
+
+        if (device == null) {
+            log.warn("Device authentication rejected - device not found in database: mobileNo={}",
+                    message.getClientId());
+            result.setResultCode(T0001.Failure);
+            return result;
+        }
+
+        session.register(message);
+        session.setAttribute(SessionKey.Device, device);
+
         result.setResultCode(T0001.Success);
         return result;
     }

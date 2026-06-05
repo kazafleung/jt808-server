@@ -104,6 +104,10 @@ public class DeviceService {
      * calendar-day online-time counter ({@code ol}). Flushes an expired window
      * to {@link DeviceDiagDaily} before accumulating, following the same pattern
      * as GPS/signal diagnostics.
+     * 
+     * <p>
+     * If the session spans multiple calendar days, the duration is split
+     * and recorded to each day proportionally.
      */
     public void recordSessionEnd(String mobileNo, LocalDateTime onlineAt, LocalDateTime offlineAt) {
         long durationSec = Math.max(0, ChronoUnit.SECONDS.between(onlineAt, offlineAt));
@@ -111,16 +115,59 @@ public class DeviceService {
             return;
 
         ZoneId zone = ZoneId.of(diagnosticsProperties.getWindowZone());
-        LocalDateTime todayStartUtc = LocalDate.now(zone)
-                .atStartOfDay(zone).withZoneSameInstant(ZoneOffset.UTC).toLocalDateTime();
 
-        writeDailySummaries(List.of(mobileNo), todayStartUtc, zone);
+        // Determine which day(s) this session belongs to, based on offlineAt in the
+        // configured zone
+        LocalDate onlineDate = onlineAt.atZone(ZoneOffset.UTC).withZoneSameInstant(zone).toLocalDate();
+        LocalDate offlineDate = offlineAt.atZone(ZoneOffset.UTC).withZoneSameInstant(zone).toLocalDate();
 
-        Date todayStartBson = Date.from(todayStartUtc.toInstant(ZoneOffset.UTC));
-        mongoTemplate.getDb().getCollection("devices").updateOne(
-                Filters.eq("mob", mobileNo),
-                List.of(new Document("$set",
-                        new Document("ol", buildOnlineCounterExpr(durationSec, todayStartBson)))));
+        // If session spans multiple days, split the duration
+        if (!onlineDate.equals(offlineDate)) {
+            // Calculate the split point (midnight boundary between the days)
+            LocalDateTime midnightUtc = offlineDate.atStartOfDay(zone)
+                    .withZoneSameInstant(ZoneOffset.UTC).toLocalDateTime();
+
+            // Duration in the earlier day (onlineAt to midnight)
+            long earlyDaySec = Math.max(0, ChronoUnit.SECONDS.between(onlineAt, midnightUtc));
+            // Duration in the later day (midnight to offlineAt)
+            long lateDaySec = Math.max(0, ChronoUnit.SECONDS.between(midnightUtc, offlineAt));
+
+            // Record the early day portion (if session started yesterday or earlier)
+            if (earlyDaySec > 0) {
+                LocalDateTime earlyDayStartUtc = onlineDate.atStartOfDay(zone)
+                        .withZoneSameInstant(ZoneOffset.UTC).toLocalDateTime();
+                writeDailySummaries(List.of(mobileNo), earlyDayStartUtc, zone);
+                Date earlyDayStartBson = Date.from(earlyDayStartUtc.toInstant(ZoneOffset.UTC));
+                mongoTemplate.getDb().getCollection("devices").updateOne(
+                        Filters.eq("mob", mobileNo),
+                        List.of(new Document("$set",
+                                new Document("ol", buildOnlineCounterExpr(earlyDaySec, earlyDayStartBson)))));
+            }
+
+            // Record the late day portion (today)
+            if (lateDaySec > 0) {
+                LocalDateTime lateDayStartUtc = offlineDate.atStartOfDay(zone)
+                        .withZoneSameInstant(ZoneOffset.UTC).toLocalDateTime();
+                writeDailySummaries(List.of(mobileNo), lateDayStartUtc, zone);
+                Date lateDayStartBson = Date.from(lateDayStartUtc.toInstant(ZoneOffset.UTC));
+                mongoTemplate.getDb().getCollection("devices").updateOne(
+                        Filters.eq("mob", mobileNo),
+                        List.of(new Document("$set",
+                                new Document("ol", buildOnlineCounterExpr(lateDaySec, lateDayStartBson)))));
+            }
+        } else {
+            // Session is within a single calendar day
+            LocalDateTime dayStartUtc = offlineDate.atStartOfDay(zone)
+                    .withZoneSameInstant(ZoneOffset.UTC).toLocalDateTime();
+
+            writeDailySummaries(List.of(mobileNo), dayStartUtc, zone);
+
+            Date dayStartBson = Date.from(dayStartUtc.toInstant(ZoneOffset.UTC));
+            mongoTemplate.getDb().getCollection("devices").updateOne(
+                    Filters.eq("mob", mobileNo),
+                    List.of(new Document("$set",
+                            new Document("ol", buildOnlineCounterExpr(durationSec, dayStartBson)))));
+        }
     }
 
     /**
@@ -180,6 +227,17 @@ public class DeviceService {
             Document statusBson = new Document();
             mongoTemplate.getConverter().write(status, statusBson);
 
+            // Extract mileage from latest record (attribute 0x01, in 1/10 km, convert to
+            // meters)
+            Long mileageMeters = null;
+            Map<Integer, Object> latestAttrs = latest.getAttributes();
+            if (latestAttrs != null) {
+                Long mileageTenthKm = (Long) latestAttrs.get(AttributeKey.Mileage);
+                if (mileageTenthKm != null) {
+                    mileageMeters = mileageTenthKm * 100; // 1/10 km = 100 meters
+                }
+            }
+
             int gpsTot = 0, gpsBad = 0, sigTot = 0, sigBad = 0;
             Map<String, int[]> alarmCounts = new HashMap<>();
             for (T0200 t : records) {
@@ -227,6 +285,14 @@ public class DeviceService {
                 setDoc.append(path, buildWindowedCounterExpr(path, c[0], c[1], todayStartBson));
             }
 
+            // Update online time counter for currently connected devices
+            setDoc.append("ol", buildOnlineTimeWithCurrentSession(todayStartBson));
+
+            // Update mileage counter if mileage data is available
+            if (mileageMeters != null) {
+                setDoc.append("ml", buildMileageCounterExpr(mileageMeters, todayStartBson));
+            }
+
             bulk.add(new UpdateOneModel<>(
                     Filters.eq("mob", clientId),
                     List.of(new Document("$set", setDoc))));
@@ -258,6 +324,8 @@ public class DeviceService {
         }
         expiredList.add(Criteria.where("ol.ws").lt(todayStartUtc)
                 .and("ol.sec").gt(0));
+        expiredList.add(Criteria.where("ml.ws").lt(todayStartUtc)
+                .and("ml.day").gt(0));
 
         List<Device> expired = mongoTemplate.find(
                 Query.query(Criteria.where("mob").in(clientIds)
@@ -277,6 +345,7 @@ public class DeviceService {
                     .setSignal(d.getDiagSig())
                     .setAlarms(d.getDiagAlarms())
                     .setOnline(d.getDiagOnline())
+                    .setMileage(d.getDiagMileage())
                     .setCreatedAt(LocalDateTime.now(ZoneOffset.UTC));
 
             mongoTemplate.save(summary);
@@ -302,6 +371,8 @@ public class DeviceService {
         }
         if (ws == null && d.getDiagOnline() != null)
             ws = d.getDiagOnline().getWindowStart();
+        if (ws == null && d.getDiagMileage() != null)
+            ws = d.getDiagMileage().getWindowStart();
         if (ws == null)
             return null;
         return ws.atZone(ZoneOffset.UTC).withZoneSameInstant(zone).toLocalDate();
@@ -347,15 +418,128 @@ public class DeviceService {
 
     /**
      * Builds the aggregation-pipeline expression for the online-time counter:
-     * resets to {@code {ws: todayStart, sec: durationSec}} when the window has
-     * expired; otherwise increments {@code sec} in-place.
+     * adds completed session duration to both `base` (completed only) and `sec`
+     * (total).
+     * Resets on window expiration.
      */
     private static Document buildOnlineCounterExpr(long durationSec, Date todayStart) {
         Document wsOrEpoch = new Document("$ifNull", Arrays.asList("$ol.ws", new Date(0)));
         Document isExpired = new Document("$lt", Arrays.asList(wsOrEpoch, todayStart));
-        Document resetDoc = new Document("ws", todayStart).append("sec", durationSec);
+
+        // Reset: new day, set base and sec to this session's duration
+        Document resetDoc = new Document("ws", todayStart)
+                .append("base", durationSec)
+                .append("sec", durationSec);
+
+        // Increment: add duration to existing base
+        Document existingBase = new Document("$ifNull", Arrays.asList("$ol.base", 0L));
+        Document newBase = new Document("$add", Arrays.asList(existingBase, durationSec));
         Document incrDoc = new Document("ws", "$ol.ws")
-                .append("sec", new Document("$add", Arrays.asList("$ol.sec", durationSec)));
+                .append("base", newBase)
+                .append("sec", newBase); // sec = base after session ends (no active session)
+
+        return new Document("$cond", Arrays.asList(isExpired, resetDoc, incrDoc));
+    }
+
+    /**
+     * Builds an expression that updates the online-time counter including the
+     * current active session (if device is online).
+     * 
+     * <p>
+     * Structure: ol = {ws: Date, sec: Long, base: Long}
+     * <ul>
+     * <li>ws: window start (today's midnight)</li>
+     * <li>sec: total seconds today (base + current session)</li>
+     * <li>base: completed sessions only (updated by recordSessionEnd)</li>
+     * </ul>
+     * 
+     * <p>
+     * For online devices, calculates current session duration from
+     * max(onlineAt, todayStart) to now, and adds it to base.
+     * For offline devices, sec = base.
+     */
+    private static Document buildOnlineTimeWithCurrentSession(Date todayStart) {
+        Date now = new Date();
+
+        // Check if window is expired
+        Document wsOrEpoch = new Document("$ifNull", Arrays.asList("$ol.ws", new Date(0)));
+        Document isExpired = new Document("$lt", Arrays.asList(wsOrEpoch, todayStart));
+
+        // Calculate current session duration (if online)
+        Document isOnline = new Document("$eq", Arrays.asList("$online", true));
+        Document onlineAtOrNull = new Document("$ifNull", Arrays.asList("$onlineAt", now));
+
+        // Session start for today = max(onlineAt, todayStart)
+        Document sessionStartToday = new Document("$max", Arrays.asList(onlineAtOrNull, todayStart));
+
+        // Current session duration in seconds
+        Document currentSessionMs = new Document("$subtract", Arrays.asList(now, sessionStartToday));
+        Document currentSessionSec = new Document("$toLong",
+                new Document("$divide", Arrays.asList(currentSessionMs, 1000L)));
+        Document currentSessionSecSafe = new Document("$max", Arrays.asList(currentSessionSec, 0L));
+
+        // === Window expired (new day) ===
+        // Reset base to 0, sec to current session (if online) or 0
+        Document resetSec = new Document("$cond", Arrays.asList(isOnline, currentSessionSecSafe, 0L));
+        Document resetDoc = new Document("ws", todayStart)
+                .append("base", 0L)
+                .append("sec", resetSec);
+
+        // === Window not expired (same day) ===
+        // base stays the same (completed sessions), sec = base + current session
+        Document existingBase = new Document("$ifNull", Arrays.asList("$ol.base", 0L));
+        Document totalSec = new Document("$cond", Arrays.asList(
+                isOnline,
+                new Document("$add", Arrays.asList(existingBase, currentSessionSecSafe)),
+                existingBase)); // If offline, sec = base only
+        Document incrDoc = new Document("ws", "$ol.ws")
+                .append("base", existingBase)
+                .append("sec", totalSec);
+
+        return new Document("$cond", Arrays.asList(isExpired, resetDoc, incrDoc));
+    }
+
+    /**
+     * Builds the aggregation-pipeline expression for mileage tracking:
+     * <ul>
+     * <li>ws: window start (today's midnight)</li>
+     * <li>tot: total cumulative mileage in meters</li>
+     * <li>start: mileage at start of current day window</li>
+     * <li>day: daily mileage = tot - start</li>
+     * </ul>
+     * 
+     * <p>
+     * When the window expires (new day), resets startMeters to currentMileage
+     * and dailyMeters to 0. Otherwise, updates totalMeters and calculates
+     * dailyMeters = totalMeters - startMeters.
+     * 
+     * @param currentMileageMeters the latest mileage reading in meters
+     * @param todayStart           the start of the current day window
+     * @return MongoDB aggregation expression for mileage tracking
+     */
+    private static Document buildMileageCounterExpr(long currentMileageMeters, Date todayStart) {
+        // Check if window is expired
+        Document wsOrEpoch = new Document("$ifNull", Arrays.asList("$ml.ws", new Date(0)));
+        Document isExpired = new Document("$lt", Arrays.asList(wsOrEpoch, todayStart));
+
+        // === Window expired (new day) ===
+        // Reset: tot = current, start = current, day = 0
+        Document resetDoc = new Document("ws", todayStart)
+                .append("tot", currentMileageMeters)
+                .append("start", currentMileageMeters)
+                .append("day", 0L);
+
+        // === Window not expired (same day) ===
+        // tot = current, start = existing start, day = tot - start
+        Document existingStart = new Document("$ifNull", Arrays.asList("$ml.start", currentMileageMeters));
+        Document dailyMileage = new Document("$max", Arrays.asList(
+                new Document("$subtract", Arrays.asList(currentMileageMeters, existingStart)),
+                0L)); // Ensure non-negative
+        Document incrDoc = new Document("ws", "$ml.ws")
+                .append("tot", currentMileageMeters)
+                .append("start", existingStart)
+                .append("day", dailyMileage);
+
         return new Document("$cond", Arrays.asList(isExpired, resetDoc, incrDoc));
     }
 }
