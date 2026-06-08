@@ -103,6 +103,7 @@ public class DeviceStatus extends LocationRecord {
         dl.setAccOn(base.isAccOn());
         dl.setSignalStrength(base.getSignalStrength());
         dl.setGnssCount(base.getGnssCount());
+        dl.setSupp(base.isSupp());
         // decoded bit fields
         dl.setWarn(WarnBits.from(msg.getWarnBit()));
         dl.setStatus(StatusBits.from(msg.getStatusBit()));

@@ -144,8 +144,11 @@ public class JT808Endpoint {
     @Mapping(types = 定位数据批量上传, desc = "定位数据批量上传")
     public void T0704(T0704 message) {
         if (message.getItems() != null) {
-            message.getItems().forEach(item -> item.setClientId(message.getClientId()));
-            locationService.saveBatch(message.getItems());
+            message.getItems().forEach(item -> {
+                item.setClientId(message.getClientId());
+                item.setSupp(true); // Mark as supplementary upload
+            });
+            locationService.saveBatch(message.getItems(), true); // isSupp = true for T0704
             deviceService.updateDeviceData(message.getItems(), diagnosticsProperties);
         }
     }

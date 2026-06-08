@@ -85,6 +85,10 @@ public class Device {
     @Field("ml")
     private DeviceMileageStat diagMileage;
 
+    @Schema(description = "位置上报统计（补传数/总数）", hidden = true)
+    @Field("dl")
+    private DeviceDiagStat diagLoc;
+
     public void updateStatus(DeviceStatus status) {
         if (this.status == null) {
             this.status = status;

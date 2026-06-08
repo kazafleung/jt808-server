@@ -227,6 +227,15 @@ public class DeviceService {
             Document statusBson = new Document();
             mongoTemplate.getConverter().write(status, statusBson);
 
+            // Check if location coordinates are valid (not 0,0)
+            boolean hasValidLocation = latest.getLat() != 0.0 || latest.getLng() != 0.0;
+
+            // If location is invalid, remove it from the status update to preserve existing
+            // valid location
+            if (!hasValidLocation) {
+                statusBson.remove("loc");
+            }
+
             // Extract mileage from latest record (attribute 0x01, in 1/10 km, convert to
             // meters)
             Long mileageMeters = null;
@@ -239,6 +248,7 @@ public class DeviceService {
             }
 
             int gpsTot = 0, gpsBad = 0, sigTot = 0, sigBad = 0;
+            int locTot = records.size(), locSupp = 0; // Count all records and supplementary ones
             Map<String, int[]> alarmCounts = new HashMap<>();
             for (T0200 t : records) {
                 Map<Integer, Object> attrs = t.getAttributes();
@@ -261,11 +271,17 @@ public class DeviceService {
                     if (videoWarn != 0)
                         c[1]++;
                 }
+                // Count supplementary (batch) uploads
+                if (t.isSupp()) {
+                    locSupp++;
+                }
             }
 
             Document setDoc = new Document();
 
             // Status: advance only when incoming is strictly newer than stored
+            // When location is invalid (0,0), update all fields except location (which was
+            // removed above)
             setDoc.append("st", new Document("$cond", Arrays.asList(
                     new Document("$lt", Arrays.asList(
                             new Document("$ifNull", Arrays.asList("$st.dt", new Date(0))),
@@ -292,6 +308,9 @@ public class DeviceService {
             if (mileageMeters != null) {
                 setDoc.append("ml", buildMileageCounterExpr(mileageMeters, todayStartBson));
             }
+
+            // Update location statistics (total count and supplementary count)
+            setDoc.append("dl", buildWindowedCounterExpr("dl", locTot, locSupp, todayStartBson));
 
             bulk.add(new UpdateOneModel<>(
                     Filters.eq("mob", clientId),
@@ -326,6 +345,8 @@ public class DeviceService {
                 .and("ol.sec").gt(0));
         expiredList.add(Criteria.where("ml.ws").lt(todayStartUtc)
                 .and("ml.day").gt(0));
+        expiredList.add(Criteria.where("dl.ws").lt(todayStartUtc)
+                .and("dl.tot").gt(0));
 
         List<Device> expired = mongoTemplate.find(
                 Query.query(Criteria.where("mob").in(clientIds)
@@ -346,6 +367,7 @@ public class DeviceService {
                     .setAlarms(d.getDiagAlarms())
                     .setOnline(d.getDiagOnline())
                     .setMileage(d.getDiagMileage())
+                    .setLocation(d.getDiagLoc())
                     .setCreatedAt(LocalDateTime.now(ZoneOffset.UTC));
 
             mongoTemplate.save(summary);
@@ -373,6 +395,8 @@ public class DeviceService {
             ws = d.getDiagOnline().getWindowStart();
         if (ws == null && d.getDiagMileage() != null)
             ws = d.getDiagMileage().getWindowStart();
+        if (ws == null && d.getDiagLoc() != null)
+            ws = d.getDiagLoc().getWindowStart();
         if (ws == null)
             return null;
         return ws.atZone(ZoneOffset.UTC).withZoneSameInstant(zone).toLocalDate();

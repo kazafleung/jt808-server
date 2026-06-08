@@ -92,7 +92,15 @@ public class LocationRecord {
         @Field("sat")
         private Integer gnssCount;
 
+        /** 是否批量补传（true: T0704批量上传, false: T0200实时上传） */
+        @Field("supp")
+        private boolean isSupp;
+
         public static LocationRecord from(T0200 msg) {
+                return from(msg, false);
+        }
+
+        public static LocationRecord from(T0200 msg, boolean isSupp) {
                 // deviceTime from JT808 is always CST (UTC+8); convert to UTC for storage
                 LocalDateTime deviceTimeUtc = msg.getDeviceTime() == null ? null
                                 : msg.getDeviceTime().atZone(ZoneId.of("Asia/Hong_Kong"))
@@ -112,6 +120,7 @@ public class LocationRecord {
                                 .setAccOn(Bit.isTrue(msg.getStatusBit(), 0))
                                 .setSignalStrength(
                                                 attrs != null ? (Integer) attrs.get(AttributeKey.SignalStrength) : null)
-                                .setGnssCount(attrs != null ? (Integer) attrs.get(AttributeKey.GnssCount) : null);
+                                .setGnssCount(attrs != null ? (Integer) attrs.get(AttributeKey.GnssCount) : null)
+                                .setSupp(isSupp);
         }
 }

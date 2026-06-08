@@ -48,6 +48,9 @@ public class T0200 extends JTMessage {
     @Field(converter = AttributeConverterYue.class, desc = "位置附加信息(粤标)", version = 1)
     private Map<Integer, Object> attributes;
 
+    /** 是否批量补传（transient，仅用于内部处理） */
+    private transient boolean isSupp;
+
     public int getAttributeInt(int key) {
         if (attributes != null) {
             Integer value = (Integer) attributes.get(key);

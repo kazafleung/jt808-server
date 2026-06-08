@@ -20,11 +20,21 @@ public class LocationService {
      * Save a batch of T0200 location reports (called from @AsyncBatch handler).
      */
     public void saveBatch(List<T0200> list) {
+        saveBatch(list, false);
+    }
+
+    /**
+     * Save a batch of location reports with supplementary flag.
+     * 
+     * @param list   T0200 messages
+     * @param isSupp true for T0704 batch upload, false for T0200 real-time upload
+     */
+    public void saveBatch(List<T0200> list, boolean isSupp) {
         List<LocationRecord> records = list.stream()
-                .map(LocationRecord::from)
+                .map(msg -> LocationRecord.from(msg, isSupp))
                 .toList();
         locationRepository.saveAll(records);
-        log.debug("Saved {} location records", records.size());
+        log.debug("Saved {} location records (isSupp={})", records.size(), isSupp);
     }
 
     /**
