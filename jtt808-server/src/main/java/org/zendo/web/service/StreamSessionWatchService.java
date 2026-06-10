@@ -20,6 +20,8 @@ import org.springframework.stereotype.Service;
 import org.zendo.protocol.t808.T0001;
 import org.zendo.protocol.t1078.T9101;
 import org.zendo.protocol.t1078.T9102;
+import org.zendo.protocol.t1078.T9201;
+import org.zendo.protocol.t1078.T9202;
 import org.zendo.web.config.JTProperties;
 import org.zendo.web.endpoint.MessageManager;
 import org.zendo.web.model.entity.StreamSession;
@@ -28,12 +30,12 @@ import java.util.List;
 
 /**
  * Watches the stream_sessions collection for changes and automatically
- * starts/stops live streams based on subscriber presence:
+ * starts/stops streams based on subscriber presence:
  * <ul>
- * <li>STREAMING + no subscribers → send T9102 (command=0) to stop the
- * stream</li>
- * <li>STOPPED + subscribers exist → send T9101 to restart the stream</li>
+ * <li>STREAMING + no subscribers → send T9102/T9202 to stop the stream</li>
+ * <li>STOPPED + subscribers exist → send T9101/T9201 to restart the stream</li>
  * </ul>
+ * Supports both LIVE streaming (T9101/T9102) and PLAYBACK (T9201/T9202).
  * Only acts on devices whose JT808 session is connected to this server
  * instance.
  */
@@ -149,99 +151,199 @@ public class StreamSessionWatchService implements SmartLifecycle {
         StreamSession.Status status = streamSession.getStatus();
 
         if (!hasSubscribers && status == StreamSession.Status.STREAMING) {
-            log.info("No subscribers for clientId={} channelNo={} — sending T9102 stop",
-                    clientId, streamSession.getChannelNo());
+            log.info("No subscribers for clientId={} channelNo={} streamType={} — sending stop command",
+                    clientId, streamSession.getChannelNo(), streamSession.getStreamType());
             stopStream(streamSession);
 
         } else if (hasSubscribers && status == StreamSession.Status.STOPPED) {
-            log.info("Subscribers found for clientId={} channelNo={} (status=STOPPED) — sending T9101 start",
-                    clientId, streamSession.getChannelNo());
+            log.info(
+                    "Subscribers found for clientId={} channelNo={} streamType={} (status=STOPPED) — sending start command",
+                    clientId, streamSession.getChannelNo(), streamSession.getStreamType());
             startStream(streamSession);
 
         } else if (status == StreamSession.Status.ERROR) {
             if (hasSubscribers) {
-                log.info("Stream ERROR with subscribers for clientId={} channelNo={} — restarting",
-                        clientId, streamSession.getChannelNo());
+                log.info("Stream ERROR with subscribers for clientId={} channelNo={} streamType={} — restarting",
+                        clientId, streamSession.getChannelNo(), streamSession.getStreamType());
                 restartStream(streamSession);
             } else {
-                log.info("Stream ERROR with no subscribers for clientId={} channelNo={} — sending T9102 stop",
-                        clientId, streamSession.getChannelNo());
+                log.info(
+                        "Stream ERROR with no subscribers for clientId={} channelNo={} streamType={} — sending stop command",
+                        clientId, streamSession.getChannelNo(), streamSession.getStreamType());
                 stopStream(streamSession);
             }
         }
     }
 
     private void restartStream(StreamSession streamSession) {
-        T9102 stopRequest = new T9102()
-                .setChannelNo(streamSession.getChannelNo())
-                .setCommand(0)
-                .setCloseType(0)
-                .setStreamType(streamSession.getStreamType());
-        stopRequest.setClientId(streamSession.getClientId());
+        StreamSession.StreamType streamType = streamSession.getStreamType();
 
-        messageManager.request(stopRequest, T0001.class)
-                .flatMap(resp -> {
-                    JTProperties.C9101 cfg = jtProperties.getT9101();
-                    T9101 startRequest = new T9101()
-                            .setChannelNo(streamSession.getChannelNo())
-                            .setMediaType(streamSession.getMediaType())
-                            .setStreamType(streamSession.getStreamType())
-                            .setIp(cfg.getIp())
-                            .setTcpPort(cfg.getTcpPort())
-                            .setUdpPort(cfg.getUdpPort());
-                    startRequest.setClientId(streamSession.getClientId());
-                    return messageManager.request(startRequest, T0001.class);
-                })
-                .subscribe(
-                        resp -> log.info("Stream restart succeeded: clientId={} channelNo={}",
-                                streamSession.getClientId(), streamSession.getChannelNo()),
-                        err -> log.warn("Stream restart failed: clientId={} channelNo={} — {}",
-                                streamSession.getClientId(), streamSession.getChannelNo(), err.getMessage()));
+        if (streamType == StreamSession.StreamType.PLAYBACK) {
+            // Stop playback first
+            T9202 stopRequest = new T9202()
+                    .setChannelNo(streamSession.getChannelNo())
+                    .setPlaybackMode(2) // 2=结束回放
+                    .setPlaybackSpeed(0);
+            stopRequest.setClientId(streamSession.getClientId());
+
+            messageManager.request(stopRequest, T0001.class)
+                    .flatMap(resp -> {
+                        // Restart playback
+                        JTProperties.C9201 cfg = jtProperties.getT9201();
+                        T9201 startRequest = new T9201()
+                                .setChannelNo(streamSession.getChannelNo())
+                                .setMediaType(streamSession.getMediaType())
+                                .setStreamType(streamSession.getCodeStreamType())
+                                .setIp(cfg.getIp())
+                                .setTcpPort(cfg.getTcpPort())
+                                .setUdpPort(cfg.getUdpPort())
+                                .setStorageType(
+                                        streamSession.getStorageType() != null ? streamSession.getStorageType() : 0)
+                                .setPlaybackMode(
+                                        streamSession.getPlaybackMode() != null ? streamSession.getPlaybackMode() : 0)
+                                .setPlaybackSpeed(
+                                        streamSession.getPlaybackSpeed() != null ? streamSession.getPlaybackSpeed() : 0)
+                                .setStartTime(streamSession.getStartTime())
+                                .setEndTime(streamSession.getEndTime());
+                        startRequest.setClientId(streamSession.getClientId());
+                        return messageManager.request(startRequest, T0001.class);
+                    })
+                    .subscribe(
+                            resp -> log.info("Playback restart succeeded: clientId={} channelNo={}",
+                                    streamSession.getClientId(), streamSession.getChannelNo()),
+                            err -> log.warn("Playback restart failed: clientId={} channelNo={} — {}",
+                                    streamSession.getClientId(), streamSession.getChannelNo(), err.getMessage()));
+        } else {
+            // LIVE streaming
+            T9102 stopRequest = new T9102()
+                    .setChannelNo(streamSession.getChannelNo())
+                    .setCommand(0)
+                    .setCloseType(0)
+                    .setStreamType(streamSession.getCodeStreamType());
+            stopRequest.setClientId(streamSession.getClientId());
+
+            messageManager.request(stopRequest, T0001.class)
+                    .flatMap(resp -> {
+                        JTProperties.C9101 cfg = jtProperties.getT9101();
+                        T9101 startRequest = new T9101()
+                                .setChannelNo(streamSession.getChannelNo())
+                                .setMediaType(streamSession.getMediaType())
+                                .setStreamType(streamSession.getCodeStreamType())
+                                .setIp(cfg.getIp())
+                                .setTcpPort(cfg.getTcpPort())
+                                .setUdpPort(cfg.getUdpPort());
+                        startRequest.setClientId(streamSession.getClientId());
+                        return messageManager.request(startRequest, T0001.class);
+                    })
+                    .subscribe(
+                            resp -> log.info("Live stream restart succeeded: clientId={} channelNo={}",
+                                    streamSession.getClientId(), streamSession.getChannelNo()),
+                            err -> log.warn("Live stream restart failed: clientId={} channelNo={} — {}",
+                                    streamSession.getClientId(), streamSession.getChannelNo(), err.getMessage()));
+        }
     }
 
     private void startStream(StreamSession streamSession) {
-        JTProperties.C9101 cfg = jtProperties.getT9101();
-        T9101 request = new T9101()
-                .setChannelNo(streamSession.getChannelNo())
-                .setMediaType(streamSession.getMediaType())
-                .setStreamType(streamSession.getStreamType())
-                .setIp(cfg.getIp())
-                .setTcpPort(cfg.getTcpPort())
-                .setUdpPort(cfg.getUdpPort());
-        request.setClientId(streamSession.getClientId());
+        StreamSession.StreamType streamType = streamSession.getStreamType();
 
-        messageManager.request(request, T0001.class)
-                .doOnSuccess(resp -> {
-                    mongoTemplate.updateFirst(
-                            Query.query(Criteria.where("cid").is(streamSession.getClientId())
-                                    .and("cho").is(streamSession.getChannelNo())),
-                            new Update()
-                                    .set("sip", cfg.getIp())
-                                    .set("stp", cfg.getTcpPort())
-                                    .set("sup", cfg.getUdpPort())
-                                    .set("st", StreamSession.Status.REQUESTED.name()),
-                            StreamSession.class);
-                })
-                .subscribe(
-                        resp -> log.info("T9101 auto-start succeeded: clientId={} channelNo={}",
-                                streamSession.getClientId(), streamSession.getChannelNo()),
-                        err -> log.warn("T9101 auto-start failed: clientId={} channelNo={} — {}",
-                                streamSession.getClientId(), streamSession.getChannelNo(), err.getMessage()));
+        if (streamType == StreamSession.StreamType.PLAYBACK) {
+            // Start video playback
+            JTProperties.C9201 cfg = jtProperties.getT9201();
+            T9201 request = new T9201()
+                    .setChannelNo(streamSession.getChannelNo())
+                    .setMediaType(streamSession.getMediaType())
+                    .setStreamType(streamSession.getCodeStreamType())
+                    .setIp(cfg.getIp())
+                    .setTcpPort(cfg.getTcpPort())
+                    .setUdpPort(cfg.getUdpPort())
+                    .setStorageType(streamSession.getStorageType() != null ? streamSession.getStorageType() : 0)
+                    .setPlaybackMode(streamSession.getPlaybackMode() != null ? streamSession.getPlaybackMode() : 0)
+                    .setPlaybackSpeed(streamSession.getPlaybackSpeed() != null ? streamSession.getPlaybackSpeed() : 0)
+                    .setStartTime(streamSession.getStartTime())
+                    .setEndTime(streamSession.getEndTime());
+            request.setClientId(streamSession.getClientId());
+
+            messageManager.request(request, T0001.class)
+                    .doOnSuccess(resp -> {
+                        mongoTemplate.updateFirst(
+                                Query.query(Criteria.where("cid").is(streamSession.getClientId())
+                                        .and("cho").is(streamSession.getChannelNo())),
+                                new Update()
+                                        .set("sip", cfg.getIp())
+                                        .set("stp", cfg.getTcpPort())
+                                        .set("sup", cfg.getUdpPort())
+                                        .set("st", StreamSession.Status.REQUESTED.name()),
+                                StreamSession.class);
+                    })
+                    .subscribe(
+                            resp -> log.info("T9201 auto-start succeeded: clientId={} channelNo={}",
+                                    streamSession.getClientId(), streamSession.getChannelNo()),
+                            err -> log.warn("T9201 auto-start failed: clientId={} channelNo={} — {}",
+                                    streamSession.getClientId(), streamSession.getChannelNo(), err.getMessage()));
+        } else {
+            // Start live streaming
+            JTProperties.C9101 cfg = jtProperties.getT9101();
+            T9101 request = new T9101()
+                    .setChannelNo(streamSession.getChannelNo())
+                    .setMediaType(streamSession.getMediaType())
+                    .setStreamType(streamSession.getCodeStreamType())
+                    .setIp(cfg.getIp())
+                    .setTcpPort(cfg.getTcpPort())
+                    .setUdpPort(cfg.getUdpPort());
+            request.setClientId(streamSession.getClientId());
+
+            messageManager.request(request, T0001.class)
+                    .doOnSuccess(resp -> {
+                        mongoTemplate.updateFirst(
+                                Query.query(Criteria.where("cid").is(streamSession.getClientId())
+                                        .and("cho").is(streamSession.getChannelNo())),
+                                new Update()
+                                        .set("sip", cfg.getIp())
+                                        .set("stp", cfg.getTcpPort())
+                                        .set("sup", cfg.getUdpPort())
+                                        .set("st", StreamSession.Status.REQUESTED.name()),
+                                StreamSession.class);
+                    })
+                    .subscribe(
+                            resp -> log.info("T9101 auto-start succeeded: clientId={} channelNo={}",
+                                    streamSession.getClientId(), streamSession.getChannelNo()),
+                            err -> log.warn("T9101 auto-start failed: clientId={} channelNo={} — {}",
+                                    streamSession.getClientId(), streamSession.getChannelNo(), err.getMessage()));
+        }
     }
 
     private void stopStream(StreamSession streamSession) {
-        T9102 request = new T9102()
-                .setChannelNo(streamSession.getChannelNo())
-                .setCommand(0) // 关闭音视频传输
-                .setCloseType(0) // 关闭该通道有关的音视频数据
-                .setStreamType(streamSession.getStreamType());
-        request.setClientId(streamSession.getClientId());
+        StreamSession.StreamType streamType = streamSession.getStreamType();
 
-        messageManager.request(request, T0001.class)
-                .subscribe(
-                        resp -> log.info("T9102 auto-stop succeeded: clientId={} channelNo={}",
-                                streamSession.getClientId(), streamSession.getChannelNo()),
-                        err -> log.warn("T9102 auto-stop failed: clientId={} channelNo={} — {}",
-                                streamSession.getClientId(), streamSession.getChannelNo(), err.getMessage()));
+        if (streamType == StreamSession.StreamType.PLAYBACK) {
+            // Stop video playback
+            T9202 request = new T9202()
+                    .setChannelNo(streamSession.getChannelNo())
+                    .setPlaybackMode(2) // 2=结束回放
+                    .setPlaybackSpeed(0);
+            request.setClientId(streamSession.getClientId());
+
+            messageManager.request(request, T0001.class)
+                    .subscribe(
+                            resp -> log.info("T9202 auto-stop succeeded: clientId={} channelNo={}",
+                                    streamSession.getClientId(), streamSession.getChannelNo()),
+                            err -> log.warn("T9202 auto-stop failed: clientId={} channelNo={} — {}",
+                                    streamSession.getClientId(), streamSession.getChannelNo(), err.getMessage()));
+        } else {
+            // Stop live streaming
+            T9102 request = new T9102()
+                    .setChannelNo(streamSession.getChannelNo())
+                    .setCommand(0) // 关闭音视频传输
+                    .setCloseType(0) // 关闭该通道有关的音视频数据
+                    .setStreamType(streamSession.getCodeStreamType());
+            request.setClientId(streamSession.getClientId());
+
+            messageManager.request(request, T0001.class)
+                    .subscribe(
+                            resp -> log.info("T9102 auto-stop succeeded: clientId={} channelNo={}",
+                                    streamSession.getClientId(), streamSession.getChannelNo()),
+                            err -> log.warn("T9102 auto-stop failed: clientId={} channelNo={} — {}",
+                                    streamSession.getClientId(), streamSession.getChannelNo(), err.getMessage()));
+        }
     }
 }

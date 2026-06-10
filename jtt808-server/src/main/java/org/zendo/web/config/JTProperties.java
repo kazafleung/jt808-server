@@ -29,6 +29,7 @@ public class JTProperties {
     private String messagePackage;
     private C0801 t0801;
     private C9101 t9101;
+    private C9201 t9201;
     private C9208 t9208;
     private C9206 t9206;
 
@@ -39,6 +40,16 @@ public class JTProperties {
         /** T9101实时音视频传输 媒体服务器TCP端口 */
         private int tcpPort;
         /** T9101实时音视频传输 媒体服务器UDP端口 */
+        private int udpPort;
+    }
+
+    @Data
+    public static class C9201 {
+        /** T9201远程录像回放 媒体服务器IP地址 */
+        private String ip;
+        /** T9201远程录像回放 媒体服务器TCP端口 */
+        private int tcpPort;
+        /** T9201远程录像回放 媒体服务器UDP端口 */
         private int udpPort;
     }
 

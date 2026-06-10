@@ -15,9 +15,10 @@ import java.time.ZoneOffset;
 import java.util.List;
 
 /**
- * Tracks live streaming sessions initiated via JT/T 1078 T9101 commands.
- * One document per (clientId, channelNo) — upserted on each T9101 request.
- * Status is updated both by this server (on T9102 control commands) and by
+ * Tracks streaming sessions initiated via JT/T 1078 commands.
+ * Supports both live streaming (T9101) and video playback (T9201).
+ * One document per (clientId, channelNo) — upserted on each request.
+ * Status is updated both by this server (on control commands) and by
  * the media server when it receives/loses stream data.
  */
 @Data
@@ -35,6 +36,10 @@ public class StreamSession {
     @Indexed(unique = true)
     private String tag;
 
+    @Schema(description = "流类型: LIVE=实时音视频 PLAYBACK=录像回放")
+    @Field("stype")
+    private StreamType streamType;
+
     @Schema(description = "终端手机号")
     @Field("cid")
     private String clientId;
@@ -49,7 +54,31 @@ public class StreamSession {
 
     @Schema(description = "码流类型: 0=主码流 1=子码流")
     @Field("sty")
-    private int streamType;
+    private int codeStreamType;
+
+    // ── Playback-specific fields (only for StreamType.PLAYBACK) ──────────────
+
+    @Schema(description = "存储器类型: 0=所有存储器 1=主存储器 2=灾备存储器 (仅回放)")
+    @Field("stot")
+    private Integer storageType;
+
+    @Schema(description = "回放方式: 0=正常回放 1=快进回放 2=关键帧快退回放 3=关键帧播放 4=单帧上传 (仅回放)")
+    @Field("pm")
+    private Integer playbackMode;
+
+    @Schema(description = "快进或快退倍数: 0=无效 1=1倍 2=2倍 3=4倍 4=8倍 5=16倍 (仅回放)")
+    @Field("ps")
+    private Integer playbackSpeed;
+
+    @Schema(description = "开始时间 YYMMDDHHMMSS (仅回放)")
+    @Field("st")
+    private String startTime;
+
+    @Schema(description = "结束时间 YYMMDDHHMMSS (仅回放)")
+    @Field("et")
+    private String endTime;
+
+    // ── Server connection details ─────────────────────────────────────────────
 
     @Schema(description = "媒体服务器IP")
     @Field("sip")
@@ -78,6 +107,14 @@ public class StreamSession {
     @Schema(description = "订阅者列表")
     private List<Subscriber> subscribers;
 
+    /** Stream type: live or playback */
+    public enum StreamType {
+        /** Real-time audio/video streaming (T9101/T9102) */
+        LIVE,
+        /** Recorded video playback (T9201/T9202) */
+        PLAYBACK
+    }
+
     /** A user who has subscribed to watch this stream. */
     @Data
     @Accessors(chain = true)
@@ -93,13 +130,13 @@ public class StreamSession {
     }
 
     public enum Status {
-        /** T9101 sent, waiting for device to connect to media server */
+        /** T9101/T9201 sent, waiting for device to connect to media server */
         REQUESTED,
         /** Media server confirmed stream is active */
         STREAMING,
-        /** T9102 command=2: stream paused */
+        /** T9102/T9202 pause command: stream paused */
         PAUSED,
-        /** T9102 command=0/4: stream closed, or media server lost the stream */
+        /** T9102/T9202 stop command: stream closed, or media server lost the stream */
         STOPPED,
         /** Media server reported a stream error */
         ERROR
@@ -110,7 +147,7 @@ public class StreamSession {
         return this;
     }
 
-    public static String buildTag(String clientId, int channelNo) {
-        return String.format("%012d", Long.parseLong(clientId)) + "-" + channelNo;
+    public static String buildTag(String prefix, String clientId, int channelNo) {
+        return prefix + String.format("%012d", Long.parseLong(clientId)) + "-" + channelNo;
     }
 }

@@ -62,6 +62,10 @@ jt-server:
       ip: 152.69.210.81
       tcp-port: 1078
       udp-port: 1078
+    t9201:
+      ip: 152.69.210.81
+      tcp-port: 1079
+      udp-port: 1079
     t9208:
       host: 152.69.210.81
       port: 10780

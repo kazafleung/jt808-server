@@ -50,13 +50,15 @@ public class JT1078Controller {
     @Operation(summary = "9201 平台下发远程录像回放请求")
     @PostMapping("9201")
     public Mono<T1205> T9201(@RequestBody T9201 request) {
-        return messageManager.request(request, T1205.class);
+        return messageManager.request(request, T1205.class)
+                .doOnSuccess(resp -> streamSessionService.startPlayback(request));
     }
 
     @Operation(summary = "9202 平台下发远程录像回放控制")
     @PostMapping("9202")
     public Mono<T0001> T9202(@RequestBody T9202 request) {
-        return messageManager.request(request, T0001.class);
+        return messageManager.request(request, T0001.class)
+                .doOnSuccess(resp -> streamSessionService.controlPlayback(request));
     }
 
     @Operation(summary = "9205 查询资源列表")
