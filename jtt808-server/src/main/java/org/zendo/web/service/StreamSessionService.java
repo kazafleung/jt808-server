@@ -119,8 +119,8 @@ public class StreamSessionService {
                 .set("stot", request.getStorageType())
                 .set("pm", request.getPlaybackMode())
                 .set("ps", request.getPlaybackSpeed())
-                .set("st", request.getStartTime())
-                .set("et", request.getEndTime())
+                .set("pbst", request.getStartTime())
+                .set("pbet", request.getEndTime())
                 .set("st", StreamSession.Status.REQUESTED.name())
                 .set("reqAt", LocalDateTime.now(ZoneOffset.UTC))
                 .set("upAt", LocalDateTime.now(ZoneOffset.UTC));
@@ -156,7 +156,7 @@ public class StreamSessionService {
             case 1 -> update.set("st", StreamSession.Status.PAUSED.name());
             case 2 -> update.set("st", StreamSession.Status.STOPPED.name());
             case 3, 4 -> update.set("ps", request.getPlaybackSpeed());
-            case 5 -> update.set("st", request.getPlaybackTime());
+            case 5 -> update.set("pbst", request.getPlaybackTime());
             case 6 -> update.set("pm", request.getPlaybackMode());
             default -> {
                 log.warn("Unknown T9202 playback mode: {}", request.getPlaybackMode());
