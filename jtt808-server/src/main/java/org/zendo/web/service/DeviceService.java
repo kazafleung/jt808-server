@@ -249,6 +249,7 @@ public class DeviceService {
 
             int gpsTot = 0, gpsBad = 0, sigTot = 0, sigBad = 0;
             int locTot = records.size(), locSupp = 0; // Count all records and supplementary ones
+            LocalDateTime suppMin = null, suppMax = null; // Track supplement time range
             Map<String, int[]> alarmCounts = new HashMap<>();
             for (T0200 t : records) {
                 Map<Integer, Object> attrs = t.getAttributes();
@@ -271,10 +272,23 @@ public class DeviceService {
                     if (videoWarn != 0)
                         c[1]++;
                 }
-                // Count supplementary (batch) uploads
+                // Count supplementary (batch) uploads and track time range
                 if (t.isSupp()) {
                     locSupp++;
+                    LocalDateTime dt = t.getDeviceTime();
+                    if (dt != null) {
+                        if (suppMin == null || dt.isBefore(suppMin))
+                            suppMin = dt;
+                        if (suppMax == null || dt.isAfter(suppMax))
+                            suppMax = dt;
+                    }
                 }
+            }
+
+            // Calculate supplement duration in seconds
+            long suppDurationSec = 0;
+            if (suppMin != null && suppMax != null) {
+                suppDurationSec = java.time.Duration.between(suppMin, suppMax).getSeconds();
             }
 
             Document setDoc = new Document();
@@ -309,8 +323,8 @@ public class DeviceService {
                 setDoc.append("ml", buildMileageCounterExpr(mileageMeters, todayStartBson));
             }
 
-            // Update location statistics (total count and supplementary count)
-            setDoc.append("dl", buildWindowedCounterExpr("dl", locTot, locSupp, todayStartBson));
+            // Update location statistics (total count, supplementary count, and duration)
+            setDoc.append("dl", buildLocationCounterExpr("dl", locTot, locSupp, suppDurationSec, todayStartBson));
 
             bulk.add(new UpdateOneModel<>(
                     Filters.eq("mob", clientId),
@@ -436,6 +450,52 @@ public class DeviceService {
                 .append("tot", newTot)
                 .append("bad", newBad)
                 .append("ratio", newRatio);
+
+        return new Document("$cond", Arrays.asList(isExpired, resetDoc, incrDoc));
+    }
+
+    /**
+     * Builds the aggregation-pipeline expression for location statistics with
+     * supplement duration tracking:
+     * resets to
+     * {@code {ws: todayStart, tot: batchTot, bad: batchBad, ratio: ..., sd: durationSec}}
+     * when the window has expired (ws &lt; todayStart); otherwise increments
+     * the existing counters and accumulates duration.
+     *
+     * @param field       field path (e.g., "dl")
+     * @param batchTot    total location records in this batch
+     * @param batchBad    supplementary location count in this batch
+     * @param durationSec supplement duration for this batch in seconds
+     * @param todayStart  start of the current window (today's midnight)
+     */
+    private static Document buildLocationCounterExpr(
+            String field, int batchTot, int batchBad, long durationSec, Date todayStart) {
+
+        Document wsOrEpoch = new Document("$ifNull",
+                Arrays.asList("$" + field + ".ws", new Date(0)));
+
+        Document isExpired = new Document("$lt", Arrays.asList(wsOrEpoch, todayStart));
+
+        Document resetDoc = new Document("ws", todayStart)
+                .append("tot", batchTot)
+                .append("bad", batchBad)
+                .append("ratio", batchTot == 0 ? 0.0 : (double) batchBad / batchTot)
+                .append("sd", durationSec);
+
+        Document newTot = new Document("$add", Arrays.asList("$" + field + ".tot", batchTot));
+        Document newBad = new Document("$add", Arrays.asList("$" + field + ".bad", batchBad));
+        Document newRatio = new Document("$cond", Arrays.asList(
+                new Document("$eq", Arrays.asList(newTot, 0)),
+                0.0,
+                new Document("$divide", Arrays.asList(newBad, newTot))));
+        Document existingDuration = new Document("$ifNull", Arrays.asList("$" + field + ".sd", 0L));
+        Document newDuration = new Document("$add", Arrays.asList(existingDuration, durationSec));
+
+        Document incrDoc = new Document("ws", "$" + field + ".ws")
+                .append("tot", newTot)
+                .append("bad", newBad)
+                .append("ratio", newRatio)
+                .append("sd", newDuration);
 
         return new Document("$cond", Arrays.asList(isExpired, resetDoc, incrDoc));
     }

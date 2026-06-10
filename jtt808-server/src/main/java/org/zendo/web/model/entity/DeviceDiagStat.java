@@ -37,4 +37,11 @@ public class DeviceDiagStat {
      */
     @Field("ratio")
     private double ratio;
+
+    /**
+     * Accumulated supplement duration in seconds for supplementary (0x704) records.
+     * Incremented each time a 0x704 message is processed.
+     */
+    @Field("sd")
+    private Long suppDurationSec;
 }
