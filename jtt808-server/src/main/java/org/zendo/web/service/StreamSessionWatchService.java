@@ -27,6 +27,7 @@ import org.zendo.web.endpoint.MessageManager;
 import org.zendo.web.model.entity.StreamSession;
 
 import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Watches the stream_sessions collection for changes and automatically
@@ -55,6 +56,17 @@ public class StreamSessionWatchService implements SmartLifecycle {
         private volatile boolean running = false;
         private volatile MongoCursor<?> activeCursor;
         private Thread watchThread;
+
+        // Track last known T9202 parameters to detect changes
+        private final ConcurrentHashMap<String, PlaybackParams> lastPlaybackParams = new ConcurrentHashMap<>();
+
+        @lombok.Data
+        @lombok.AllArgsConstructor
+        private static class PlaybackParams {
+                private Integer playbackMode;
+                private Integer playbackSpeed;
+                private String startTime;
+        }
 
         // ── SmartLifecycle ────────────────────────────────────────────────────────
 
@@ -202,10 +214,27 @@ public class StreamSessionWatchService implements SmartLifecycle {
 
         private void updatePlaybackStream(StreamSession streamSession) {
                 // Use T9202 to update playback control parameters (speed, mode, time)
-                // Based on pst (start time), pet (end time), ps (playback speed)
+                // Only send if parameters actually changed
                 Integer playbackSpeed = streamSession.getPlaybackSpeed();
                 Integer playbackMode = streamSession.getPlaybackMode();
                 String startTime = streamSession.getStartTime();
+
+                // Build key for tracking: clientId:channelNo
+                String trackingKey = streamSession.getClientId() + ":" + streamSession.getChannelNo();
+                PlaybackParams currentParams = new PlaybackParams(playbackMode, playbackSpeed, startTime);
+                PlaybackParams lastParams = lastPlaybackParams.get(trackingKey);
+
+                // Check if parameters changed
+                if (lastParams != null && lastParams.equals(currentParams)) {
+                        log.debug("T9202 parameters unchanged for clientId={} channelNo={} — skipping update",
+                                        streamSession.getClientId(), streamSession.getChannelNo());
+                        return;
+                }
+
+                // Parameters changed or first time — send T9202
+                log.info("T9202 parameters changed for clientId={} channelNo={} — mode={} speed={} time={}",
+                                streamSession.getClientId(), streamSession.getChannelNo(),
+                                playbackMode, playbackSpeed, startTime);
 
                 T9202 request = new T9202()
                                 .setChannelNo(streamSession.getChannelNo())
@@ -219,6 +248,9 @@ public class StreamSessionWatchService implements SmartLifecycle {
                 }
 
                 request.setClientId(streamSession.getClientId());
+
+                // Store the new parameters before sending
+                lastPlaybackParams.put(trackingKey, currentParams);
 
                 messageManager.request(request, T0001.class)
                                 .subscribe(
@@ -340,32 +372,32 @@ public class StreamSessionWatchService implements SmartLifecycle {
                                         .setEndTime(streamSession.getEndTime());
                         request.setClientId(streamSession.getClientId());
 
+                        // Update DB immediately before sending command
+                        mongoTemplate.updateFirst(
+                                        Query.query(Criteria.where("cid")
+                                                        .is(streamSession.getClientId())
+                                                        .and("cho")
+                                                        .is(streamSession.getChannelNo())
+                                                        .and("stype")
+                                                        .is("PLAYBACK")),
+                                        new Update()
+                                                        .set("sip", cfg.getIp())
+                                                        .set("stp", cfg.getTcpPort())
+                                                        .set("sup", cfg.getUdpPort())
+                                                        .set("st", StreamSession.Status.REQUESTED.name()),
+                                        StreamSession.class);
+                        log.info("T9201 command sending: clientId={} channelNo={} sip={} stp={} sup={}",
+                                        streamSession.getClientId(), streamSession.getChannelNo(),
+                                        cfg.getIp(), cfg.getTcpPort(), cfg.getUdpPort());
+
                         messageManager.request(request, T0001.class)
-                                        .doOnSuccess(resp -> {
-                                                mongoTemplate.updateFirst(
-                                                                Query.query(Criteria.where("cid")
-                                                                                .is(streamSession.getClientId())
-                                                                                .and("cho")
-                                                                                .is(streamSession.getChannelNo())
-                                                                                .and("stype")
-                                                                                .is("PLAYBACK")),
-                                                                new Update()
-                                                                                .set("sip", cfg.getIp())
-                                                                                .set("stp", cfg.getTcpPort())
-                                                                                .set("sup", cfg.getUdpPort())
-                                                                                .set("st", StreamSession.Status.REQUESTED
-                                                                                                .name()),
-                                                                StreamSession.class);
-                                                log.info("T9201 sent and DB updated: clientId={} channelNo={}",
-                                                                streamSession.getClientId(),
-                                                                streamSession.getChannelNo());
-                                        })
                                         .subscribe(
                                                         resp -> log.debug(
-                                                                        "T9201 response received: clientId={} channelNo={} resp={}",
+                                                                        "T9201 device response received: clientId={} channelNo={}",
                                                                         streamSession.getClientId(),
-                                                                        streamSession.getChannelNo(), resp),
-                                                        err -> log.warn("T9201 response error (command may have succeeded): clientId={} channelNo={} — {}",
+                                                                        streamSession.getChannelNo()),
+                                                        err -> log.warn(
+                                                                        "T9201 device response timeout (stream may still work): clientId={} channelNo={} — {}",
                                                                         streamSession.getClientId(),
                                                                         streamSession.getChannelNo(),
                                                                         err != null ? err.toString() : "null error"));
@@ -381,32 +413,32 @@ public class StreamSessionWatchService implements SmartLifecycle {
                                         .setUdpPort(cfg.getUdpPort());
                         request.setClientId(streamSession.getClientId());
 
+                        // Update DB immediately before sending command
+                        mongoTemplate.updateFirst(
+                                        Query.query(Criteria.where("cid")
+                                                        .is(streamSession.getClientId())
+                                                        .and("cho")
+                                                        .is(streamSession.getChannelNo())
+                                                        .and("stype")
+                                                        .is("LIVE")),
+                                        new Update()
+                                                        .set("sip", cfg.getIp())
+                                                        .set("stp", cfg.getTcpPort())
+                                                        .set("sup", cfg.getUdpPort())
+                                                        .set("st", StreamSession.Status.REQUESTED.name()),
+                                        StreamSession.class);
+                        log.info("T9101 command sending: clientId={} channelNo={} sip={} stp={} sup={}",
+                                        streamSession.getClientId(), streamSession.getChannelNo(),
+                                        cfg.getIp(), cfg.getTcpPort(), cfg.getUdpPort());
+
                         messageManager.request(request, T0001.class)
-                                        .doOnSuccess(resp -> {
-                                                mongoTemplate.updateFirst(
-                                                                Query.query(Criteria.where("cid")
-                                                                                .is(streamSession.getClientId())
-                                                                                .and("cho")
-                                                                                .is(streamSession.getChannelNo())
-                                                                                .and("stype")
-                                                                                .is("LIVE")),
-                                                                new Update()
-                                                                                .set("sip", cfg.getIp())
-                                                                                .set("stp", cfg.getTcpPort())
-                                                                                .set("sup", cfg.getUdpPort())
-                                                                                .set("st", StreamSession.Status.REQUESTED
-                                                                                                .name()),
-                                                                StreamSession.class);
-                                                log.info("T9101 sent and DB updated: clientId={} channelNo={}",
-                                                                streamSession.getClientId(),
-                                                                streamSession.getChannelNo());
-                                        })
                                         .subscribe(
                                                         resp -> log.debug(
-                                                                        "T9101 response received: clientId={} channelNo={} resp={}",
+                                                                        "T9101 device response received: clientId={} channelNo={}",
                                                                         streamSession.getClientId(),
-                                                                        streamSession.getChannelNo(), resp),
-                                                        err -> log.warn("T9101 response error (command may have succeeded): clientId={} channelNo={} — {}",
+                                                                        streamSession.getChannelNo()),
+                                                        err -> log.warn(
+                                                                        "T9101 device response timeout (stream may still work): clientId={} channelNo={} — {}",
                                                                         streamSession.getClientId(),
                                                                         streamSession.getChannelNo(),
                                                                         err != null ? err.toString() : "null error"));
@@ -415,6 +447,10 @@ public class StreamSessionWatchService implements SmartLifecycle {
 
         private void stopStream(StreamSession streamSession) {
                 StreamSession.StreamType streamType = streamSession.getStreamType();
+
+                // Clean up tracking when stream stops
+                String trackingKey = streamSession.getClientId() + ":" + streamSession.getChannelNo();
+                lastPlaybackParams.remove(trackingKey);
 
                 if (streamType == StreamSession.StreamType.PLAYBACK) {
                         // Stop video playback
