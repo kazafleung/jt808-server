@@ -209,6 +209,7 @@ public class StreamSessionWatchService implements SmartLifecycle {
 
                 T9202 request = new T9202()
                                 .setChannelNo(streamSession.getChannelNo())
+                                .setPlaybackTime(startTime)
                                 .setPlaybackMode(playbackMode != null ? playbackMode : 0)
                                 .setPlaybackSpeed(playbackSpeed != null ? playbackSpeed : 0);
 
