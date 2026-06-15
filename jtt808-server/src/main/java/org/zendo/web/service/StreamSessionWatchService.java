@@ -355,16 +355,19 @@ public class StreamSessionWatchService implements SmartLifecycle {
                                                                                 .set("st", StreamSession.Status.REQUESTED
                                                                                                 .name()),
                                                                 StreamSession.class);
+                                                log.info("T9201 sent and DB updated: clientId={} channelNo={}",
+                                                                streamSession.getClientId(),
+                                                                streamSession.getChannelNo());
                                         })
                                         .subscribe(
-                                                        resp -> log.info(
-                                                                        "T9201 auto-start succeeded: clientId={} channelNo={}",
+                                                        resp -> log.debug(
+                                                                        "T9201 response received: clientId={} channelNo={} resp={}",
                                                                         streamSession.getClientId(),
-                                                                        streamSession.getChannelNo()),
-                                                        err -> log.warn("T9201 auto-start failed: clientId={} channelNo={} — {}",
+                                                                        streamSession.getChannelNo(), resp),
+                                                        err -> log.warn("T9201 response error (command may have succeeded): clientId={} channelNo={} — {}",
                                                                         streamSession.getClientId(),
                                                                         streamSession.getChannelNo(),
-                                                                        err.getMessage()));
+                                                                        err != null ? err.toString() : "null error"));
                 } else {
                         // Start live streaming
                         JTProperties.C9101 cfg = jtProperties.getT9101();
@@ -393,16 +396,19 @@ public class StreamSessionWatchService implements SmartLifecycle {
                                                                                 .set("st", StreamSession.Status.REQUESTED
                                                                                                 .name()),
                                                                 StreamSession.class);
+                                                log.info("T9101 sent and DB updated: clientId={} channelNo={}",
+                                                                streamSession.getClientId(),
+                                                                streamSession.getChannelNo());
                                         })
                                         .subscribe(
-                                                        resp -> log.info(
-                                                                        "T9101 auto-start succeeded: clientId={} channelNo={}",
+                                                        resp -> log.debug(
+                                                                        "T9101 response received: clientId={} channelNo={} resp={}",
                                                                         streamSession.getClientId(),
-                                                                        streamSession.getChannelNo()),
-                                                        err -> log.warn("T9101 auto-start failed: clientId={} channelNo={} — {}",
+                                                                        streamSession.getChannelNo(), resp),
+                                                        err -> log.warn("T9101 response error (command may have succeeded): clientId={} channelNo={} — {}",
                                                                         streamSession.getClientId(),
                                                                         streamSession.getChannelNo(),
-                                                                        err.getMessage()));
+                                                                        err != null ? err.toString() : "null error"));
                 }
         }
 
