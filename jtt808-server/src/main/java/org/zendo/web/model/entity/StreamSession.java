@@ -130,6 +130,8 @@ public class StreamSession {
     }
 
     public enum Status {
+        /** Waiting to send T9101/T9201 request */
+        PENDING,
         /** T9101/T9201 sent, waiting for device to connect to media server */
         REQUESTED,
         /** Media server confirmed stream is active */
@@ -148,6 +150,6 @@ public class StreamSession {
     }
 
     public static String buildTag(String prefix, String clientId, int channelNo) {
-        return prefix + String.format("%012d", Long.parseLong(clientId)) + "-" + channelNo;
+        return prefix + "-" + String.format("%012d", Long.parseLong(clientId)) + "-" + channelNo;
     }
 }
