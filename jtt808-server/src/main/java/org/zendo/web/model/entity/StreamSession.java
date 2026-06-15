@@ -71,11 +71,11 @@ public class StreamSession {
     private Integer playbackSpeed;
 
     @Schema(description = "开始时间 YYMMDDHHMMSS (仅回放)")
-    @Field("pbst")
+    @Field("pst")
     private String startTime;
 
     @Schema(description = "结束时间 YYMMDDHHMMSS (仅回放)")
-    @Field("pbet")
+    @Field("pet")
     private String endTime;
 
     // ── Server connection details ─────────────────────────────────────────────

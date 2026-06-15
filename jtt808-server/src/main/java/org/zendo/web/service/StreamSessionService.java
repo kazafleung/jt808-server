@@ -24,150 +24,150 @@ import java.util.Optional;
 @RequiredArgsConstructor
 public class StreamSessionService {
 
-    private final StreamSessionRepository streamSessionRepository;
-    private final MongoTemplate mongoTemplate;
+        private final StreamSessionRepository streamSessionRepository;
+        private final MongoTemplate mongoTemplate;
 
-    /**
-     * Called after a T9101 command is successfully sent.
-     * Upserts stream config fields for LIVE streaming.
-     * Never touches the subscribers array.
-     */
-    public StreamSession startStream(T9101 request) {
-        String clientId = request.getClientId();
-        int channelNo = request.getChannelNo();
+        /**
+         * Called after a T9101 command is successfully sent.
+         * Upserts stream config fields for LIVE streaming.
+         * Never touches the subscribers array.
+         */
+        public StreamSession startStream(T9101 request) {
+                String clientId = request.getClientId();
+                int channelNo = request.getChannelNo();
 
-        Query query = Query.query(
-                Criteria.where("cid").is(clientId).and("cho").is(channelNo));
+                Query query = Query.query(
+                                Criteria.where("cid").is(clientId).and("cho").is(channelNo));
 
-        Update update = new Update()
-                .set("cid", clientId)
-                .set("cho", channelNo)
-                .set("tag", StreamSession.buildTag("live", clientId, channelNo))
-                .set("stype", StreamSession.StreamType.LIVE.name())
-                .set("mt", request.getMediaType())
-                .set("sty", request.getStreamType())
-                .set("sip", request.getIp())
-                .set("stp", request.getTcpPort())
-                .set("sup", request.getUdpPort())
-                .set("st", StreamSession.Status.REQUESTED.name())
-                .set("reqAt", LocalDateTime.now(ZoneOffset.UTC))
-                .set("upAt", LocalDateTime.now(ZoneOffset.UTC));
+                Update update = new Update()
+                                .set("cid", clientId)
+                                .set("cho", channelNo)
+                                .set("tag", StreamSession.buildTag("live", clientId, channelNo))
+                                .set("stype", StreamSession.StreamType.LIVE.name())
+                                .set("mt", request.getMediaType())
+                                .set("sty", request.getStreamType())
+                                .set("sip", request.getIp())
+                                .set("stp", request.getTcpPort())
+                                .set("sup", request.getUdpPort())
+                                .set("st", StreamSession.Status.REQUESTED.name())
+                                .set("reqAt", LocalDateTime.now(ZoneOffset.UTC))
+                                .set("upAt", LocalDateTime.now(ZoneOffset.UTC));
 
-        StreamSession saved = mongoTemplate.findAndModify(
-                query, update,
-                FindAndModifyOptions.options().upsert(true).returnNew(true),
-                StreamSession.class);
+                StreamSession saved = mongoTemplate.findAndModify(
+                                query, update,
+                                FindAndModifyOptions.options().upsert(true).returnNew(true),
+                                StreamSession.class);
 
-        log.info("Live stream session started: clientId={}, channelNo={}", clientId, channelNo);
-        return saved;
-    }
-
-    /**
-     * Called after a T9102 control command is successfully sent.
-     * Uses $set on individual fields — never touches the subscribers array.
-     * 0 = close → STOPPED
-     * 1 = switch stream → update streamType only
-     * 2 = pause → PAUSED
-     * 3 = resume → STREAMING
-     * 4 = close talk → STOPPED
-     */
-    public Optional<StreamSession> controlStream(T9102 request) {
-        Query query = Query.query(
-                Criteria.where("cid").is(request.getClientId()).and("cho").is(request.getChannelNo()));
-
-        Update update = new Update().set("upAt", LocalDateTime.now(ZoneOffset.UTC));
-        switch (request.getCommand()) {
-            case 0, 4 -> update.set("st", StreamSession.Status.STOPPED.name());
-            case 1 -> update.set("sty", request.getStreamType());
-            case 2 -> update.set("st", StreamSession.Status.PAUSED.name());
-            case 3 -> update.set("st", StreamSession.Status.STREAMING.name());
-            default -> {
-                log.warn("Unknown T9102 command: {}", request.getCommand());
-                return Optional.empty();
-            }
+                log.info("Live stream session started: clientId={}, channelNo={}", clientId, channelNo);
+                return saved;
         }
 
-        StreamSession result = mongoTemplate.findAndModify(
-                query, update,
-                FindAndModifyOptions.options().returnNew(true),
-                StreamSession.class);
-        return Optional.ofNullable(result);
-    }
+        /**
+         * Called after a T9102 control command is successfully sent.
+         * Uses $set on individual fields — never touches the subscribers array.
+         * 0 = close → STOPPED
+         * 1 = switch stream → update streamType only
+         * 2 = pause → PAUSED
+         * 3 = resume → STREAMING
+         * 4 = close talk → STOPPED
+         */
+        public Optional<StreamSession> controlStream(T9102 request) {
+                Query query = Query.query(
+                                Criteria.where("cid").is(request.getClientId()).and("cho").is(request.getChannelNo()));
 
-    /**
-     * Called after a T9201 command is successfully sent.
-     * Upserts stream config fields for PLAYBACK streaming.
-     * Never touches the subscribers array.
-     */
-    public StreamSession startPlayback(T9201 request) {
-        String clientId = request.getClientId();
-        int channelNo = request.getChannelNo();
+                Update update = new Update().set("upAt", LocalDateTime.now(ZoneOffset.UTC));
+                switch (request.getCommand()) {
+                        case 0, 4 -> update.set("st", StreamSession.Status.STOPPED.name());
+                        case 1 -> update.set("sty", request.getStreamType());
+                        case 2 -> update.set("st", StreamSession.Status.PAUSED.name());
+                        case 3 -> update.set("st", StreamSession.Status.STREAMING.name());
+                        default -> {
+                                log.warn("Unknown T9102 command: {}", request.getCommand());
+                                return Optional.empty();
+                        }
+                }
 
-        Query query = Query.query(
-                Criteria.where("cid").is(clientId).and("cho").is(channelNo));
-
-        Update update = new Update()
-                .set("cid", clientId)
-                .set("cho", channelNo)
-                .set("tag", StreamSession.buildTag("playback", clientId, channelNo))
-                .set("stype", StreamSession.StreamType.PLAYBACK.name())
-                .set("mt", request.getMediaType())
-                .set("sty", request.getStreamType())
-                .set("sip", request.getIp())
-                .set("stp", request.getTcpPort())
-                .set("sup", request.getUdpPort())
-                .set("stot", request.getStorageType())
-                .set("pm", request.getPlaybackMode())
-                .set("ps", request.getPlaybackSpeed())
-                .set("pbst", request.getStartTime())
-                .set("pbet", request.getEndTime())
-                .set("st", StreamSession.Status.REQUESTED.name())
-                .set("reqAt", LocalDateTime.now(ZoneOffset.UTC))
-                .set("upAt", LocalDateTime.now(ZoneOffset.UTC));
-
-        StreamSession saved = mongoTemplate.findAndModify(
-                query, update,
-                FindAndModifyOptions.options().upsert(true).returnNew(true),
-                StreamSession.class);
-
-        log.info("Playback session started: clientId={}, channelNo={}, startTime={}, endTime={}",
-                clientId, channelNo, request.getStartTime(), request.getEndTime());
-        return saved;
-    }
-
-    /**
-     * Called after a T9202 playback control command is successfully sent.
-     * Uses $set on individual fields — never touches the subscribers array.
-     * 0 = start playback → STREAMING
-     * 1 = pause → PAUSED
-     * 2 = end playback → STOPPED
-     * 3 = fast forward → update playbackSpeed
-     * 4 = key frame fast rewind → update playbackSpeed
-     * 5 = drag → update playbackTime
-     * 6 = key frame playback → update playbackMode
-     */
-    public Optional<StreamSession> controlPlayback(T9202 request) {
-        Query query = Query.query(
-                Criteria.where("cid").is(request.getClientId()).and("cho").is(request.getChannelNo()));
-
-        Update update = new Update().set("upAt", LocalDateTime.now(ZoneOffset.UTC));
-        switch (request.getPlaybackMode()) {
-            case 0 -> update.set("st", StreamSession.Status.STREAMING.name());
-            case 1 -> update.set("st", StreamSession.Status.PAUSED.name());
-            case 2 -> update.set("st", StreamSession.Status.STOPPED.name());
-            case 3, 4 -> update.set("ps", request.getPlaybackSpeed());
-            case 5 -> update.set("pbst", request.getPlaybackTime());
-            case 6 -> update.set("pm", request.getPlaybackMode());
-            default -> {
-                log.warn("Unknown T9202 playback mode: {}", request.getPlaybackMode());
-                return Optional.empty();
-            }
+                StreamSession result = mongoTemplate.findAndModify(
+                                query, update,
+                                FindAndModifyOptions.options().returnNew(true),
+                                StreamSession.class);
+                return Optional.ofNullable(result);
         }
 
-        StreamSession result = mongoTemplate.findAndModify(
-                query, update,
-                FindAndModifyOptions.options().returnNew(true),
-                StreamSession.class);
-        return Optional.ofNullable(result);
-    }
+        /**
+         * Called after a T9201 command is successfully sent.
+         * Upserts stream config fields for PLAYBACK streaming.
+         * Never touches the subscribers array.
+         */
+        public StreamSession startPlayback(T9201 request) {
+                String clientId = request.getClientId();
+                int channelNo = request.getChannelNo();
+
+                Query query = Query.query(
+                                Criteria.where("cid").is(clientId).and("cho").is(channelNo));
+
+                Update update = new Update()
+                                .set("cid", clientId)
+                                .set("cho", channelNo)
+                                .set("tag", StreamSession.buildTag("playback", clientId, channelNo))
+                                .set("stype", StreamSession.StreamType.PLAYBACK.name())
+                                .set("mt", request.getMediaType())
+                                .set("sty", request.getStreamType())
+                                .set("sip", request.getIp())
+                                .set("stp", request.getTcpPort())
+                                .set("sup", request.getUdpPort())
+                                .set("stot", request.getStorageType())
+                                .set("pm", request.getPlaybackMode())
+                                .set("ps", request.getPlaybackSpeed())
+                                .set("pst", request.getStartTime())
+                                .set("pet", request.getEndTime())
+                                .set("st", StreamSession.Status.REQUESTED.name())
+                                .set("reqAt", LocalDateTime.now(ZoneOffset.UTC))
+                                .set("upAt", LocalDateTime.now(ZoneOffset.UTC));
+
+                StreamSession saved = mongoTemplate.findAndModify(
+                                query, update,
+                                FindAndModifyOptions.options().upsert(true).returnNew(true),
+                                StreamSession.class);
+
+                log.info("Playback session started: clientId={}, channelNo={}, startTime={}, endTime={}",
+                                clientId, channelNo, request.getStartTime(), request.getEndTime());
+                return saved;
+        }
+
+        /**
+         * Called after a T9202 playback control command is successfully sent.
+         * Uses $set on individual fields — never touches the subscribers array.
+         * 0 = start playback → STREAMING
+         * 1 = pause → PAUSED
+         * 2 = end playback → STOPPED
+         * 3 = fast forward → update playbackSpeed
+         * 4 = key frame fast rewind → update playbackSpeed
+         * 5 = drag → update playbackTime
+         * 6 = key frame playback → update playbackMode
+         */
+        public Optional<StreamSession> controlPlayback(T9202 request) {
+                Query query = Query.query(
+                                Criteria.where("cid").is(request.getClientId()).and("cho").is(request.getChannelNo()));
+
+                Update update = new Update().set("upAt", LocalDateTime.now(ZoneOffset.UTC));
+                switch (request.getPlaybackMode()) {
+                        case 0 -> update.set("st", StreamSession.Status.STREAMING.name());
+                        case 1 -> update.set("st", StreamSession.Status.PAUSED.name());
+                        case 2 -> update.set("st", StreamSession.Status.STOPPED.name());
+                        case 3, 4 -> update.set("ps", request.getPlaybackSpeed());
+                        case 5 -> update.set("pst", request.getPlaybackTime());
+                        case 6 -> update.set("pm", request.getPlaybackMode());
+                        default -> {
+                                log.warn("Unknown T9202 playback mode: {}", request.getPlaybackMode());
+                                return Optional.empty();
+                        }
+                }
+
+                StreamSession result = mongoTemplate.findAndModify(
+                                query, update,
+                                FindAndModifyOptions.options().returnNew(true),
+                                StreamSession.class);
+                return Optional.ofNullable(result);
+        }
 }

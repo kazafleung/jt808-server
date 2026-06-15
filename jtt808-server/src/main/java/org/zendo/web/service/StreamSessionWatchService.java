@@ -202,7 +202,7 @@ public class StreamSessionWatchService implements SmartLifecycle {
 
         private void updatePlaybackStream(StreamSession streamSession) {
                 // Use T9202 to update playback control parameters (speed, mode, time)
-                // Based on pbst (start time), pbet (end time), ps (playback speed)
+                // Based on pst (start time), pet (end time), ps (playback speed)
                 Integer playbackSpeed = streamSession.getPlaybackSpeed();
                 Integer playbackMode = streamSession.getPlaybackMode();
                 String startTime = streamSession.getStartTime();
