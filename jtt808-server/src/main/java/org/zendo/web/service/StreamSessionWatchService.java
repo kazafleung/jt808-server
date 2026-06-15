@@ -345,7 +345,9 @@ public class StreamSessionWatchService implements SmartLifecycle {
                                                                 Query.query(Criteria.where("cid")
                                                                                 .is(streamSession.getClientId())
                                                                                 .and("cho")
-                                                                                .is(streamSession.getChannelNo())),
+                                                                                .is(streamSession.getChannelNo())
+                                                                                .and("stype")
+                                                                                .is(streamSession.getStreamType().name())),
                                                                 new Update()
                                                                                 .set("sip", cfg.getIp())
                                                                                 .set("stp", cfg.getTcpPort())
@@ -381,7 +383,9 @@ public class StreamSessionWatchService implements SmartLifecycle {
                                                                 Query.query(Criteria.where("cid")
                                                                                 .is(streamSession.getClientId())
                                                                                 .and("cho")
-                                                                                .is(streamSession.getChannelNo())),
+                                                                                .is(streamSession.getChannelNo())
+                                                                                .and("stype")
+                                                                                .is(streamSession.getStreamType().name())),
                                                                 new Update()
                                                                                 .set("sip", cfg.getIp())
                                                                                 .set("stp", cfg.getTcpPort())
