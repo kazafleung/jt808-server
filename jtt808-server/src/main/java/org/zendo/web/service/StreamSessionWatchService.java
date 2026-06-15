@@ -347,7 +347,7 @@ public class StreamSessionWatchService implements SmartLifecycle {
                                                                                 .and("cho")
                                                                                 .is(streamSession.getChannelNo())
                                                                                 .and("stype")
-                                                                                .is(streamSession.getStreamType().name())),
+                                                                                .is("PLAYBACK")),
                                                                 new Update()
                                                                                 .set("sip", cfg.getIp())
                                                                                 .set("stp", cfg.getTcpPort())
@@ -385,7 +385,7 @@ public class StreamSessionWatchService implements SmartLifecycle {
                                                                                 .and("cho")
                                                                                 .is(streamSession.getChannelNo())
                                                                                 .and("stype")
-                                                                                .is(streamSession.getStreamType().name())),
+                                                                                .is("LIVE")),
                                                                 new Update()
                                                                                 .set("sip", cfg.getIp())
                                                                                 .set("stp", cfg.getTcpPort())
