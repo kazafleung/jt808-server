@@ -27,7 +27,6 @@ import org.zendo.web.endpoint.MessageManager;
 import org.zendo.web.model.entity.StreamSession;
 
 import java.util.List;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Watches the stream_sessions collection for changes and automatically
@@ -56,17 +55,6 @@ public class StreamSessionWatchService implements SmartLifecycle {
         private volatile boolean running = false;
         private volatile MongoCursor<?> activeCursor;
         private Thread watchThread;
-
-        // Track last known T9202 parameters to detect changes
-        private final ConcurrentHashMap<String, PlaybackParams> lastPlaybackParams = new ConcurrentHashMap<>();
-
-        @lombok.Data
-        @lombok.AllArgsConstructor
-        private static class PlaybackParams {
-                private Integer playbackMode;
-                private Integer playbackSpeed;
-                private String startTime;
-        }
 
         // ── SmartLifecycle ────────────────────────────────────────────────────────
 
@@ -164,18 +152,13 @@ public class StreamSessionWatchService implements SmartLifecycle {
 
                 if (streamType == StreamSession.StreamType.PLAYBACK) {
                         // PLAYBACK logic: no subscriber checks, react to status directly
+                        // App server handles T9202 control directly, no monitoring needed for
+                        // STREAMING/REQUESTED
                         if (status == StreamSession.Status.PENDING || status == StreamSession.Status.ERROR) {
                                 // PENDING = waiting to request, ERROR = retry
                                 log.info("PLAYBACK status={} for clientId={} channelNo={} — sending start command",
                                                 status, clientId, streamSession.getChannelNo());
                                 startStream(streamSession);
-
-                        } else if (status == StreamSession.Status.STREAMING
-                                        || status == StreamSession.Status.REQUESTED) {
-                                // Update playback parameters (speed, mode, time) using T9202
-                                log.info("PLAYBACK status={} for clientId={} channelNo={} — checking for parameter updates",
-                                                status, clientId, streamSession.getChannelNo());
-                                updatePlaybackStream(streamSession);
 
                         } else if (status == StreamSession.Status.STOPPED) {
                                 log.info("PLAYBACK status=STOPPED for clientId={} channelNo={} — sending stop command",
@@ -210,58 +193,6 @@ public class StreamSessionWatchService implements SmartLifecycle {
                                 }
                         }
                 }
-        }
-
-        private void updatePlaybackStream(StreamSession streamSession) {
-                // Use T9202 to update playback control parameters (speed, mode, time)
-                // Only send if parameters actually changed
-                Integer playbackSpeed = streamSession.getPlaybackSpeed();
-                Integer playbackMode = streamSession.getPlaybackMode();
-                String startTime = streamSession.getStartTime();
-
-                // Build key for tracking: clientId:channelNo
-                String trackingKey = streamSession.getClientId() + ":" + streamSession.getChannelNo();
-                PlaybackParams currentParams = new PlaybackParams(playbackMode, playbackSpeed, startTime);
-                PlaybackParams lastParams = lastPlaybackParams.get(trackingKey);
-
-                // Check if parameters changed
-                if (lastParams != null && lastParams.equals(currentParams)) {
-                        log.debug("T9202 parameters unchanged for clientId={} channelNo={} — skipping update",
-                                        streamSession.getClientId(), streamSession.getChannelNo());
-                        return;
-                }
-
-                // Parameters changed or first time — send T9202
-                log.info("T9202 parameters changed for clientId={} channelNo={} — mode={} speed={} time={}",
-                                streamSession.getClientId(), streamSession.getChannelNo(),
-                                playbackMode, playbackSpeed, startTime);
-
-                T9202 request = new T9202()
-                                .setChannelNo(streamSession.getChannelNo())
-                                .setPlaybackTime(startTime)
-                                .setPlaybackMode(playbackMode != null ? playbackMode : 0)
-                                .setPlaybackSpeed(playbackSpeed != null ? playbackSpeed : 0);
-
-                // If playback mode is 5 (drag/seek), set the playback time
-                if (playbackMode != null && playbackMode == 5 && startTime != null) {
-                        request.setPlaybackTime(startTime);
-                }
-
-                request.setClientId(streamSession.getClientId());
-
-                // Store the new parameters before sending
-                lastPlaybackParams.put(trackingKey, currentParams);
-
-                messageManager.request(request, T0001.class)
-                                .subscribe(
-                                                resp -> log.info(
-                                                                "T9202 playback update succeeded: clientId={} channelNo={} mode={} speed={}",
-                                                                streamSession.getClientId(),
-                                                                streamSession.getChannelNo(),
-                                                                playbackMode, playbackSpeed),
-                                                err -> log.warn("T9202 playback update failed: clientId={} channelNo={} — {}",
-                                                                streamSession.getClientId(),
-                                                                streamSession.getChannelNo(), err.getMessage()));
         }
 
         private void restartStream(StreamSession streamSession) {
@@ -447,10 +378,6 @@ public class StreamSessionWatchService implements SmartLifecycle {
 
         private void stopStream(StreamSession streamSession) {
                 StreamSession.StreamType streamType = streamSession.getStreamType();
-
-                // Clean up tracking when stream stops
-                String trackingKey = streamSession.getClientId() + ":" + streamSession.getChannelNo();
-                lastPlaybackParams.remove(trackingKey);
 
                 if (streamType == StreamSession.StreamType.PLAYBACK) {
                         // Stop video playback
