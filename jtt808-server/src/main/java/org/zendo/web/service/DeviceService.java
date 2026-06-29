@@ -126,9 +126,11 @@ public class DeviceService {
             // Calculate the split point (midnight boundary between the days)
             LocalDateTime midnightUtc = offlineDate.atStartOfDay(zone)
                     .withZoneSameInstant(ZoneOffset.UTC).toLocalDateTime();
+            LocalDateTime onlineDayEndUtc = onlineDate.plusDays(1).atStartOfDay(zone)
+                    .withZoneSameInstant(ZoneOffset.UTC).toLocalDateTime();
 
             // Duration in the earlier day (onlineAt to midnight)
-            long earlyDaySec = Math.max(0, ChronoUnit.SECONDS.between(onlineAt, midnightUtc));
+            long earlyDaySec = Math.max(0, ChronoUnit.SECONDS.between(onlineAt, onlineDayEndUtc));
             // Duration in the later day (midnight to offlineAt)
             long lateDaySec = Math.max(0, ChronoUnit.SECONDS.between(midnightUtc, offlineAt));
 
@@ -138,10 +140,12 @@ public class DeviceService {
                         .withZoneSameInstant(ZoneOffset.UTC).toLocalDateTime();
                 writeDailySummaries(List.of(mobileNo), earlyDayStartUtc, zone);
                 Date earlyDayStartBson = Date.from(earlyDayStartUtc.toInstant(ZoneOffset.UTC));
+                Date earlyDayEndBson = Date.from(onlineDayEndUtc.toInstant(ZoneOffset.UTC));
                 mongoTemplate.getDb().getCollection("devices").updateOne(
                         Filters.eq("mob", mobileNo),
                         List.of(new Document("$set",
-                                new Document("ol", buildOnlineCounterExpr(earlyDaySec, earlyDayStartBson)))));
+                                new Document("ol",
+                                        buildOnlineCounterExpr(earlyDaySec, earlyDayStartBson, earlyDayEndBson)))));
             }
 
             // Record the late day portion (today)
@@ -150,10 +154,11 @@ public class DeviceService {
                         .withZoneSameInstant(ZoneOffset.UTC).toLocalDateTime();
                 writeDailySummaries(List.of(mobileNo), lateDayStartUtc, zone);
                 Date lateDayStartBson = Date.from(lateDayStartUtc.toInstant(ZoneOffset.UTC));
+                Date offlineAtBson = Date.from(offlineAt.toInstant(ZoneOffset.UTC));
                 mongoTemplate.getDb().getCollection("devices").updateOne(
                         Filters.eq("mob", mobileNo),
                         List.of(new Document("$set",
-                                new Document("ol", buildOnlineCounterExpr(lateDaySec, lateDayStartBson)))));
+                                new Document("ol", buildOnlineCounterExpr(lateDaySec, lateDayStartBson, offlineAtBson)))));
             }
         } else {
             // Session is within a single calendar day
@@ -163,10 +168,11 @@ public class DeviceService {
             writeDailySummaries(List.of(mobileNo), dayStartUtc, zone);
 
             Date dayStartBson = Date.from(dayStartUtc.toInstant(ZoneOffset.UTC));
+            Date offlineAtBson = Date.from(offlineAt.toInstant(ZoneOffset.UTC));
             mongoTemplate.getDb().getCollection("devices").updateOne(
                     Filters.eq("mob", mobileNo),
                     List.of(new Document("$set",
-                            new Document("ol", buildOnlineCounterExpr(durationSec, dayStartBson)))));
+                            new Document("ol", buildOnlineCounterExpr(durationSec, dayStartBson, offlineAtBson)))));
         }
     }
 
@@ -507,17 +513,27 @@ public class DeviceService {
      * Resets on window expiration.
      */
     private static Document buildOnlineCounterExpr(long durationSec, Date todayStart) {
+        return buildOnlineCounterExpr(durationSec, todayStart, new Date());
+    }
+
+    static Document buildOnlineCounterExpr(long durationSec, Date todayStart, Date windowEnd) {
         Document wsOrEpoch = new Document("$ifNull", Arrays.asList("$ol.ws", new Date(0)));
         Document isExpired = new Document("$lt", Arrays.asList(wsOrEpoch, todayStart));
+        Document elapsedWindowMs = new Document("$subtract", Arrays.asList(windowEnd, todayStart));
+        Document elapsedWindowSec = new Document("$toLong",
+                new Document("$divide", Arrays.asList(elapsedWindowMs, 1000L)));
+        Document elapsedWindowSecSafe = new Document("$max", Arrays.asList(elapsedWindowSec, 0L));
 
         // Reset: new day, set base and sec to this session's duration
+        Document resetBase = new Document("$min", Arrays.asList(durationSec, elapsedWindowSecSafe));
         Document resetDoc = new Document("ws", todayStart)
-                .append("base", durationSec)
-                .append("sec", durationSec);
+                .append("base", resetBase)
+                .append("sec", resetBase);
 
         // Increment: add duration to existing base
         Document existingBase = new Document("$ifNull", Arrays.asList("$ol.base", 0L));
-        Document newBase = new Document("$add", Arrays.asList(existingBase, durationSec));
+        Document rawNewBase = new Document("$add", Arrays.asList(existingBase, durationSec));
+        Document newBase = new Document("$min", Arrays.asList(rawNewBase, elapsedWindowSecSafe));
         Document incrDoc = new Document("ws", "$ol.ws")
                 .append("base", newBase)
                 .append("sec", newBase); // sec = base after session ends (no active session)
@@ -541,10 +557,15 @@ public class DeviceService {
      * For online devices, calculates current session duration from
      * max(onlineAt, todayStart) to now, and adds it to base.
      * For offline devices, sec = base.
+     * In both cases, sec is capped at the elapsed seconds since todayStart so
+     * overlapping or duplicate session-end updates cannot report more online time
+     * than has elapsed in the current window.
      */
     private static Document buildOnlineTimeWithCurrentSession(Date todayStart) {
-        Date now = new Date();
+        return buildOnlineTimeWithCurrentSession(todayStart, new Date());
+    }
 
+    static Document buildOnlineTimeWithCurrentSession(Date todayStart, Date now) {
         // Check if window is expired
         Document wsOrEpoch = new Document("$ifNull", Arrays.asList("$ol.ws", new Date(0)));
         Document isExpired = new Document("$lt", Arrays.asList(wsOrEpoch, todayStart));
@@ -562,22 +583,31 @@ public class DeviceService {
                 new Document("$divide", Arrays.asList(currentSessionMs, 1000L)));
         Document currentSessionSecSafe = new Document("$max", Arrays.asList(currentSessionSec, 0L));
 
+        Document elapsedTodayMs = new Document("$subtract", Arrays.asList(now, todayStart));
+        Document elapsedTodaySec = new Document("$toLong",
+                new Document("$divide", Arrays.asList(elapsedTodayMs, 1000L)));
+        Document elapsedTodaySecSafe = new Document("$max", Arrays.asList(elapsedTodaySec, 0L));
+
         // === Window expired (new day) ===
         // Reset base to 0, sec to current session (if online) or 0
-        Document resetSec = new Document("$cond", Arrays.asList(isOnline, currentSessionSecSafe, 0L));
+        Document resetSec = new Document("$min", Arrays.asList(
+                new Document("$cond", Arrays.asList(isOnline, currentSessionSecSafe, 0L)),
+                elapsedTodaySecSafe));
         Document resetDoc = new Document("ws", todayStart)
                 .append("base", 0L)
                 .append("sec", resetSec);
 
         // === Window not expired (same day) ===
-        // base stays the same (completed sessions), sec = base + current session
+        // base is completed sessions, capped to the elapsed window; sec = base + current session
         Document existingBase = new Document("$ifNull", Arrays.asList("$ol.base", 0L));
-        Document totalSec = new Document("$cond", Arrays.asList(
+        Document cappedBase = new Document("$min", Arrays.asList(existingBase, elapsedTodaySecSafe));
+        Document rawTotalSec = new Document("$cond", Arrays.asList(
                 isOnline,
-                new Document("$add", Arrays.asList(existingBase, currentSessionSecSafe)),
-                existingBase)); // If offline, sec = base only
+                new Document("$add", Arrays.asList(cappedBase, currentSessionSecSafe)),
+                cappedBase)); // If offline, sec = base only
+        Document totalSec = new Document("$min", Arrays.asList(rawTotalSec, elapsedTodaySecSafe));
         Document incrDoc = new Document("ws", "$ol.ws")
-                .append("base", existingBase)
+                .append("base", cappedBase)
                 .append("sec", totalSec);
 
         return new Document("$cond", Arrays.asList(isExpired, resetDoc, incrDoc));
