@@ -13,6 +13,56 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 class DeviceServiceTest {
 
     @Test
+    void statusUpdatePreservesPreviousLocationWhenIncomingLocationIsInvalid() {
+        Date previousTime = new Date(1_000);
+        Date incomingTime = new Date(2_000);
+        Document previousLoc = new Document("type", "Point")
+                .append("coordinates", List.of(114.1, 22.3));
+        Document incomingLoc = new Document("type", "Point")
+                .append("coordinates", List.of(0.0, 0.0));
+        Document incomingStatus = new Document("dt", incomingTime)
+                .append("loc", incomingLoc)
+                .append("spd", 88);
+        Document expr = DeviceService.buildStatusUpdateExpr(incomingStatus, incomingTime, false);
+
+        Map<String, Object> device = new LinkedHashMap<>();
+        device.put("st", new Document("dt", previousTime)
+                .append("loc", previousLoc)
+                .append("spd", 12));
+
+        Document result = (Document) eval(expr, device);
+
+        assertEquals(incomingTime, result.get("dt"));
+        assertEquals(previousLoc, result.get("loc"));
+        assertEquals(88, result.get("spd"));
+    }
+
+    @Test
+    void statusUpdateUsesIncomingLocationWhenLocationIsValid() {
+        Date previousTime = new Date(1_000);
+        Date incomingTime = new Date(2_000);
+        Document previousLoc = new Document("type", "Point")
+                .append("coordinates", List.of(114.1, 22.3));
+        Document incomingLoc = new Document("type", "Point")
+                .append("coordinates", List.of(114.2, 22.4));
+        Document incomingStatus = new Document("dt", incomingTime)
+                .append("loc", incomingLoc)
+                .append("spd", 88);
+        Document expr = DeviceService.buildStatusUpdateExpr(incomingStatus, incomingTime, true);
+
+        Map<String, Object> device = new LinkedHashMap<>();
+        device.put("st", new Document("dt", previousTime)
+                .append("loc", previousLoc)
+                .append("spd", 12));
+
+        Document result = (Document) eval(expr, device);
+
+        assertEquals(incomingTime, result.get("dt"));
+        assertEquals(incomingLoc, result.get("loc"));
+        assertEquals(88, result.get("spd"));
+    }
+
+    @Test
     void onlineCounterCapsActiveSessionAtElapsedWindowSeconds() {
         Date todayStart = new Date(0);
         Date now = new Date(3_600_000);

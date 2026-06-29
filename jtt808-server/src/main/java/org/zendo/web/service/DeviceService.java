@@ -236,12 +236,6 @@ public class DeviceService {
             // Check if location coordinates are valid (not 0,0)
             boolean hasValidLocation = latest.getLat() != 0.0 || latest.getLng() != 0.0;
 
-            // If location is invalid, remove it from the status update to preserve existing
-            // valid location
-            if (!hasValidLocation) {
-                statusBson.remove("loc");
-            }
-
             // Extract mileage from latest record (attribute 0x01, in 1/10 km, convert to
             // meters)
             Long mileageMeters = null;
@@ -299,15 +293,9 @@ public class DeviceService {
 
             Document setDoc = new Document();
 
-            // Status: advance only when incoming is strictly newer than stored
-            // When location is invalid (0,0), update all fields except location (which was
-            // removed above)
-            setDoc.append("st", new Document("$cond", Arrays.asList(
-                    new Document("$lt", Arrays.asList(
-                            new Document("$ifNull", Arrays.asList("$st.dt", new Date(0))),
-                            deviceTimeBson)),
-                    statusBson,
-                    "$st")));
+            // Status: advance only when incoming is strictly newer than stored.
+            // Invalid (0,0) location reports keep the previous st.loc value.
+            setDoc.append("st", buildStatusUpdateExpr(statusBson, deviceTimeBson, hasValidLocation));
 
             if (gpsTot > 0) {
                 setDoc.append("dg", buildWindowedCounterExpr("dg", gpsTot, gpsBad, todayStartBson));
@@ -420,6 +408,20 @@ public class DeviceService {
         if (ws == null)
             return null;
         return ws.atZone(ZoneOffset.UTC).withZoneSameInstant(zone).toLocalDate();
+    }
+
+    static Document buildStatusUpdateExpr(Document statusBson, Date deviceTimeBson, boolean hasValidLocation) {
+        Document nextStatus = new Document(statusBson);
+        if (!hasValidLocation) {
+            nextStatus.put("loc", "$st.loc");
+        }
+
+        return new Document("$cond", Arrays.asList(
+                new Document("$lt", Arrays.asList(
+                        new Document("$ifNull", Arrays.asList("$st.dt", new Date(0))),
+                        deviceTimeBson)),
+                nextStatus,
+                "$st"));
     }
 
     /**
