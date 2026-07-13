@@ -61,6 +61,14 @@ public class DeviceDiagDaily {
     @Field("dl")
     private DeviceDiagStat location;
 
+    /** Disconnect statistics for the day (abnormal/total). */
+    @Field("df")
+    private DeviceDiagStat offline;
+
+    /** Working time after ACC off for the day. */
+    @Field("ao")
+    private DeviceOnlineStat accOffWork;
+
     /** When this summary record was written (UTC). */
     @Field("cat")
     private LocalDateTime createdAt;

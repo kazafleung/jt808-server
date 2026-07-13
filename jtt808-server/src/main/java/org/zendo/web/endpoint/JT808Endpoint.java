@@ -149,7 +149,7 @@ public class JT808Endpoint {
                 item.setSupp(true); // Mark as supplementary upload
             });
             locationService.saveBatch(message.getItems(), true); // isSupp = true for T0704
-            deviceService.updateDeviceData(message.getItems(), diagnosticsProperties);
+            deviceService.updateDeviceData(message.getItems(), diagnosticsProperties, 1);
         }
     }
 

@@ -8,6 +8,7 @@ import com.mongodb.client.model.WriteModel;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.bson.Document;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
@@ -20,6 +21,7 @@ import org.zendo.web.model.entity.Device;
 import org.zendo.web.model.entity.DeviceDiagDaily;
 import org.zendo.web.model.entity.DeviceDiagStat;
 import org.zendo.web.model.entity.DeviceStatus;
+import org.zendo.web.model.entity.LocationRecord;
 import org.zendo.web.repository.DeviceRepository;
 
 import java.time.LocalDate;
@@ -111,8 +113,10 @@ public class DeviceService {
      */
     public void recordSessionEnd(String mobileNo, LocalDateTime onlineAt, LocalDateTime offlineAt) {
         long durationSec = Math.max(0, ChronoUnit.SECONDS.between(onlineAt, offlineAt));
-        if (durationSec == 0)
+        if (durationSec == 0) {
+            recordOfflineDiagnostics(mobileNo, onlineAt, offlineAt);
             return;
+        }
 
         ZoneId zone = ZoneId.of(diagnosticsProperties.getWindowZone());
 
@@ -174,6 +178,88 @@ public class DeviceService {
                     List.of(new Document("$set",
                             new Document("ol", buildOnlineCounterExpr(durationSec, dayStartBson, offlineAtBson)))));
         }
+
+        recordOfflineDiagnostics(mobileNo, onlineAt, offlineAt);
+    }
+
+    private void recordOfflineDiagnostics(String mobileNo, LocalDateTime onlineAt, LocalDateTime offlineAt) {
+        ZoneId zone = ZoneId.of(diagnosticsProperties.getWindowZone());
+        LocalDate offlineDate = offlineAt.atZone(ZoneOffset.UTC).withZoneSameInstant(zone).toLocalDate();
+        LocalDateTime offlineDayStartUtc = offlineDate.atStartOfDay(zone)
+                .withZoneSameInstant(ZoneOffset.UTC).toLocalDateTime();
+        Date offlineDayStartBson = Date.from(offlineDayStartUtc.toInstant(ZoneOffset.UTC));
+        Date offlineAtBson = Date.from(offlineAt.toInstant(ZoneOffset.UTC));
+
+        writeDailySummaries(List.of(mobileNo), offlineDayStartUtc, zone);
+
+        LocationRecord latest = findLatestLocation(mobileNo);
+        boolean latestInSession = latest != null
+                && latest.getDeviceTime() != null
+                && !latest.getDeviceTime().isBefore(onlineAt);
+        boolean abnormalOffline = latestInSession && latest.isAccOn() && latest.getSpeed() > 0;
+
+        LocalDateTime accOffStart = findCurrentAccOffStart(mobileNo, onlineAt, latest);
+        if (accOffStart != null && accOffStart.isBefore(offlineAt)) {
+            long accOffDurationSec = Math.max(0, ChronoUnit.SECONDS.between(accOffStart, offlineAt));
+            mongoTemplate.getDb().getCollection("devices").updateOne(
+                    Filters.eq("mob", mobileNo),
+                    List.of(new Document("$set",
+                            new Document("ao", buildDurationCounterExpr("ao", accOffDurationSec,
+                                    offlineDayStartBson, offlineAtBson)))));
+        }
+
+        mongoTemplate.getDb().getCollection("devices").updateOne(
+                Filters.eq("mob", mobileNo),
+                List.of(new Document("$set",
+                        new Document("df", buildWindowedCounterExpr("df", 1, abnormalOffline ? 1 : 0,
+                                offlineDayStartBson)))));
+    }
+
+    private LocationRecord findLatestLocation(String mobileNo) {
+        return mongoTemplate.findOne(
+                Query.query(Criteria.where("cid").is(mobileNo))
+                        .with(Sort.by(Sort.Direction.DESC, "dt"))
+                        .limit(1),
+                LocationRecord.class);
+    }
+
+    private LocalDateTime findCurrentAccOffStart(String mobileNo, LocalDateTime onlineAt, LocationRecord latest) {
+        if (latest == null || latest.isAccOn() || latest.getDeviceTime() == null)
+            return null;
+
+        LocalDateTime latestTime = latest.getDeviceTime();
+        if (latestTime.isBefore(onlineAt))
+            return null;
+
+        LocalDateTime lowerBound = onlineAt;
+
+        LocationRecord lastAccOn = mongoTemplate.findOne(
+                Query.query(Criteria.where("cid").is(mobileNo)
+                        .and("acc").is(true)
+                        .and("dt").gte(onlineAt).lte(latestTime))
+                        .with(Sort.by(Sort.Direction.DESC, "dt"))
+                        .limit(1),
+                LocationRecord.class);
+
+        boolean includeLowerBound = true;
+        if (lastAccOn != null && lastAccOn.getDeviceTime() != null) {
+            lowerBound = lastAccOn.getDeviceTime();
+            includeLowerBound = false;
+        }
+
+        Criteria timeCriteria = includeLowerBound
+                ? Criteria.where("dt").gte(lowerBound).lte(latestTime)
+                : Criteria.where("dt").gt(lowerBound).lte(latestTime);
+
+        LocationRecord firstAccOff = mongoTemplate.findOne(
+                Query.query(Criteria.where("cid").is(mobileNo)
+                        .and("acc").is(false)
+                        .andOperator(timeCriteria))
+                        .with(Sort.by(Sort.Direction.ASC, "dt"))
+                        .limit(1),
+                LocationRecord.class);
+
+        return firstAccOff != null ? firstAccOff.getDeviceTime() : latestTime;
     }
 
     /**
@@ -191,6 +277,10 @@ public class DeviceService {
      * or server instances are idempotent.
      */
     public void updateDeviceData(List<T0200> list, DiagnosticsProperties props) {
+        updateDeviceData(list, props, 0);
+    }
+
+    public void updateDeviceData(List<T0200> list, DiagnosticsProperties props, int t0704EventCount) {
         if (list == null || list.isEmpty())
             return;
 
@@ -318,7 +408,8 @@ public class DeviceService {
             }
 
             // Update location statistics (total count, supplementary count, and duration)
-            setDoc.append("dl", buildLocationCounterExpr("dl", locTot, locSupp, suppDurationSec, todayStartBson));
+            setDoc.append("dl",
+                    buildLocationCounterExpr("dl", locTot, locSupp, suppDurationSec, t0704EventCount, todayStartBson));
 
             bulk.add(new UpdateOneModel<>(
                     Filters.eq("mob", clientId),
@@ -355,6 +446,10 @@ public class DeviceService {
                 .and("ml.day").gt(0));
         expiredList.add(Criteria.where("dl.ws").lt(todayStartUtc)
                 .and("dl.tot").gt(0));
+        expiredList.add(Criteria.where("df.ws").lt(todayStartUtc)
+                .and("df.tot").gt(0));
+        expiredList.add(Criteria.where("ao.ws").lt(todayStartUtc)
+                .and("ao.sec").gt(0));
 
         List<Device> expired = mongoTemplate.find(
                 Query.query(Criteria.where("mob").in(clientIds)
@@ -376,6 +471,8 @@ public class DeviceService {
                     .setOnline(d.getDiagOnline())
                     .setMileage(d.getDiagMileage())
                     .setLocation(d.getDiagLoc())
+                    .setOffline(d.getDiagOffline())
+                    .setAccOffWork(d.getDiagAccOffWork())
                     .setCreatedAt(LocalDateTime.now(ZoneOffset.UTC));
 
             mongoTemplate.save(summary);
@@ -405,6 +502,10 @@ public class DeviceService {
             ws = d.getDiagMileage().getWindowStart();
         if (ws == null && d.getDiagLoc() != null)
             ws = d.getDiagLoc().getWindowStart();
+        if (ws == null && d.getDiagOffline() != null)
+            ws = d.getDiagOffline().getWindowStart();
+        if (ws == null && d.getDiagAccOffWork() != null)
+            ws = d.getDiagAccOffWork().getWindowStart();
         if (ws == null)
             return null;
         return ws.atZone(ZoneOffset.UTC).withZoneSameInstant(zone).toLocalDate();
@@ -474,10 +575,11 @@ public class DeviceService {
      * @param batchTot    total location records in this batch
      * @param batchBad    supplementary location count in this batch
      * @param durationSec supplement duration for this batch in seconds
+     * @param eventCount  T0704 batch-upload message count
      * @param todayStart  start of the current window (today's midnight)
      */
-    private static Document buildLocationCounterExpr(
-            String field, int batchTot, int batchBad, long durationSec, Date todayStart) {
+    static Document buildLocationCounterExpr(
+            String field, int batchTot, int batchBad, long durationSec, long eventCount, Date todayStart) {
 
         Document wsOrEpoch = new Document("$ifNull",
                 Arrays.asList("$" + field + ".ws", new Date(0)));
@@ -488,7 +590,8 @@ public class DeviceService {
                 .append("tot", batchTot)
                 .append("bad", batchBad)
                 .append("ratio", batchTot == 0 ? 0.0 : (double) batchBad / batchTot)
-                .append("sd", durationSec);
+                .append("sd", durationSec)
+                .append("ec", eventCount);
 
         Document newTot = new Document("$add", Arrays.asList("$" + field + ".tot", batchTot));
         Document newBad = new Document("$add", Arrays.asList("$" + field + ".bad", batchBad));
@@ -498,12 +601,15 @@ public class DeviceService {
                 new Document("$divide", Arrays.asList(newBad, newTot))));
         Document existingDuration = new Document("$ifNull", Arrays.asList("$" + field + ".sd", 0L));
         Document newDuration = new Document("$add", Arrays.asList(existingDuration, durationSec));
+        Document existingEventCount = new Document("$ifNull", Arrays.asList("$" + field + ".ec", 0L));
+        Document newEventCount = new Document("$add", Arrays.asList(existingEventCount, eventCount));
 
         Document incrDoc = new Document("ws", "$" + field + ".ws")
                 .append("tot", newTot)
                 .append("bad", newBad)
                 .append("ratio", newRatio)
-                .append("sd", newDuration);
+                .append("sd", newDuration)
+                .append("ec", newEventCount);
 
         return new Document("$cond", Arrays.asList(isExpired, resetDoc, incrDoc));
     }
@@ -519,7 +625,11 @@ public class DeviceService {
     }
 
     static Document buildOnlineCounterExpr(long durationSec, Date todayStart, Date windowEnd) {
-        Document wsOrEpoch = new Document("$ifNull", Arrays.asList("$ol.ws", new Date(0)));
+        return buildDurationCounterExpr("ol", durationSec, todayStart, windowEnd);
+    }
+
+    static Document buildDurationCounterExpr(String field, long durationSec, Date todayStart, Date windowEnd) {
+        Document wsOrEpoch = new Document("$ifNull", Arrays.asList("$" + field + ".ws", new Date(0)));
         Document isExpired = new Document("$lt", Arrays.asList(wsOrEpoch, todayStart));
         Document elapsedWindowMs = new Document("$subtract", Arrays.asList(windowEnd, todayStart));
         Document elapsedWindowSec = new Document("$toLong",
@@ -533,10 +643,10 @@ public class DeviceService {
                 .append("sec", resetBase);
 
         // Increment: add duration to existing base
-        Document existingBase = new Document("$ifNull", Arrays.asList("$ol.base", 0L));
+        Document existingBase = new Document("$ifNull", Arrays.asList("$" + field + ".base", 0L));
         Document rawNewBase = new Document("$add", Arrays.asList(existingBase, durationSec));
         Document newBase = new Document("$min", Arrays.asList(rawNewBase, elapsedWindowSecSafe));
-        Document incrDoc = new Document("ws", "$ol.ws")
+        Document incrDoc = new Document("ws", "$" + field + ".ws")
                 .append("base", newBase)
                 .append("sec", newBase); // sec = base after session ends (no active session)
 

@@ -44,4 +44,11 @@ public class DeviceDiagStat {
      */
     @Field("sd")
     private Long suppDurationSec;
+
+    /**
+     * T0704 event count. For location diagnostics, {@code tot} tracks the number
+     * of location records while this tracks the number of batch-upload messages.
+     */
+    @Field("ec")
+    private Long eventCount;
 }

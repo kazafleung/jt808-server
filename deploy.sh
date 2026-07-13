@@ -8,7 +8,7 @@ SSH_USER="${SSH_USER:-opc}"
 SSH_KEY="${SSH_KEY:-/Users/zensis/taxieco/oracle/ssh-key-152.69.210.81.key}"
 REMOTE_PROJECT_DIR="${REMOTE_PROJECT_DIR:-jt808-server}"
 BRANCH="${BRANCH:-master}"
-SERVICE_NAME="${SERVICE_NAME:-media}"
+SERVICE_NAME="${SERVICE_NAME:-jt808}"
 
 if [[ ! -f "$SSH_KEY" ]]; then
   echo "SSH key not found: $SSH_KEY" >&2

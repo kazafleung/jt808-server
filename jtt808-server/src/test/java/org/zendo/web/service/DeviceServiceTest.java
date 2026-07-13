@@ -119,6 +119,50 @@ class DeviceServiceTest {
         assertEquals(3_600L, result.get("sec"));
     }
 
+    @Test
+    void locationCounterAccumulatesT0704EventCount() {
+        Date todayStart = new Date(0);
+        Document expr = DeviceService.buildLocationCounterExpr("dl", 3, 2, 600L, 1L, todayStart);
+
+        Map<String, Object> device = new LinkedHashMap<>();
+        device.put("dl", new Document("ws", todayStart)
+                .append("tot", 5)
+                .append("bad", 1)
+                .append("ratio", 0.2)
+                .append("sd", 300L)
+                .append("ec", 2L));
+
+        Document result = (Document) eval(expr, device);
+
+        assertEquals(todayStart, result.get("ws"));
+        assertEquals(8L, result.get("tot"));
+        assertEquals(3L, result.get("bad"));
+        assertEquals(0.375, (double) result.get("ratio"), 0.0001);
+        assertEquals(900L, result.get("sd"));
+        assertEquals(3L, result.get("ec"));
+    }
+
+    @Test
+    void durationCounterCanUpdateAccOffWorkField() {
+        Date todayStart = new Date(0);
+        Date offlineAt = new Date(3_600_000);
+        Document expr = DeviceService.buildDurationCounterExpr("ao", 1_000L, todayStart, offlineAt);
+
+        Map<String, Object> device = new LinkedHashMap<>();
+        device.put("ao", new Document("ws", todayStart)
+                .append("base", 500L)
+                .append("sec", 500L));
+        device.put("ol", new Document("ws", todayStart)
+                .append("base", 3_000L)
+                .append("sec", 3_000L));
+
+        Document result = (Document) eval(expr, device);
+
+        assertEquals(todayStart, result.get("ws"));
+        assertEquals(1_500L, result.get("base"));
+        assertEquals(1_500L, result.get("sec"));
+    }
+
     private static Object eval(Object expr, Map<String, Object> root) {
         if (expr instanceof String s && s.startsWith("$"))
             return resolvePath(root, s.substring(1));

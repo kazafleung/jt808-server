@@ -89,6 +89,14 @@ public class Device {
     @Field("dl")
     private DeviceDiagStat diagLoc;
 
+    @Schema(description = "离线统计（异常离线数/总离线数）", hidden = true)
+    @Field("df")
+    private DeviceDiagStat diagOffline;
+
+    @Schema(description = "ACC关闭后工作时长统计（秒）", hidden = true)
+    @Field("ao")
+    private DeviceOnlineStat diagAccOffWork;
+
     public void updateStatus(DeviceStatus status) {
         if (this.status == null) {
             this.status = status;
