@@ -3,14 +3,108 @@ package org.zendo.web.service;
 import org.bson.Document;
 import org.junit.jupiter.api.Test;
 
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.Date;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class DeviceServiceTest {
+
+    @Test
+    void sessionDurationIsSplitAcrossEveryCalendarDate() {
+        Map<LocalDate, Long> result = DailyDiagnosticsService.splitDurationByDate(
+                LocalDateTime.of(2026, 7, 12, 15, 30),
+                LocalDateTime.of(2026, 7, 14, 0, 30),
+                ZoneId.of("Asia/Hong_Kong"));
+
+        assertEquals(Map.of(
+                LocalDate.of(2026, 7, 12), 1_800L,
+                LocalDate.of(2026, 7, 13), 86_400L,
+                LocalDate.of(2026, 7, 14), 30_600L), result);
+    }
+
+    @Test
+    void sessionDurationUsesActualDstDayLength() {
+        Map<LocalDate, Long> result = DailyDiagnosticsService.splitDurationByDate(
+                LocalDateTime.of(2026, 3, 8, 5, 0),
+                LocalDateTime.of(2026, 3, 9, 4, 0),
+                ZoneId.of("America/New_York"));
+
+        assertEquals(Map.of(LocalDate.of(2026, 3, 8), 82_800L), result);
+    }
+
+    @Test
+    void sessionDurationRejectsInvertedRange() {
+        assertThrows(IllegalArgumentException.class, () ->
+                DailyDiagnosticsService.splitDurationByDate(
+                        LocalDateTime.of(2026, 7, 13, 1, 0),
+                        LocalDateTime.of(2026, 7, 13, 0, 0),
+                        ZoneId.of("Asia/Hong_Kong")));
+    }
+
+    @Test
+    void dailyCounterAddsToExistingDailyDocument() {
+        Date dayStart = new Date(0);
+        Document expr = DailyDiagnosticsService.buildDailyCounterExpr("df", 1, 1, dayStart, null);
+        Map<String, Object> root = new LinkedHashMap<>();
+        root.put("df", new Document("ws", dayStart)
+                .append("tot", 2)
+                .append("bad", 1)
+                .append("ratio", 0.5));
+
+        Document result = (Document) eval(expr, root);
+
+        assertEquals(3L, result.get("tot"));
+        assertEquals(2L, result.get("bad"));
+        assertEquals(2.0 / 3.0, (double) result.get("ratio"), 0.0001);
+    }
+
+    @Test
+    void dailyDurationIgnoresAnAlreadyAppliedSession() {
+        Date dayStart = new Date(0);
+        Document alreadyApplied = new Document("$in", List.of(
+                "session-1",
+                new Document("$ifNull", List.of("$se", List.of()))));
+        Document expr = DailyDiagnosticsService.buildDailyDurationExpr(
+                "ol", 3_600L, 86_400L, dayStart, alreadyApplied);
+        Map<String, Object> root = new LinkedHashMap<>();
+        root.put("se", List.of("session-1"));
+        root.put("ol", new Document("ws", dayStart)
+                .append("base", 1_000L)
+                .append("sec", 1_000L));
+
+        Document result = (Document) eval(expr, root);
+
+        assertEquals(1_000L, result.get("base"));
+        assertEquals(1_000L, result.get("sec"));
+    }
+
+    @Test
+    void dailyLocationCounterAccumulatesSupplementAndEventCounts() {
+        Date dayStart = new Date(0);
+        Document expr = DailyDiagnosticsService.buildDailyLocationExpr(3, 2, 600L, 1L, dayStart);
+        Map<String, Object> root = new LinkedHashMap<>();
+        root.put("dl", new Document("ws", dayStart)
+                .append("tot", 5)
+                .append("bad", 1)
+                .append("ratio", 0.2)
+                .append("sd", 300L)
+                .append("ec", 2L));
+
+        Document result = (Document) eval(expr, root);
+
+        assertEquals(8L, result.get("tot"));
+        assertEquals(3L, result.get("bad"));
+        assertEquals(0.375, (double) result.get("ratio"), 0.0001);
+        assertEquals(900L, result.get("sd"));
+        assertEquals(3L, result.get("ec"));
+    }
 
     @Test
     void statusUpdatePreservesPreviousLocationWhenIncomingLocationIsInvalid() {
@@ -62,107 +156,6 @@ class DeviceServiceTest {
         assertEquals(88, result.get("spd"));
     }
 
-    @Test
-    void onlineCounterCapsActiveSessionAtElapsedWindowSeconds() {
-        Date todayStart = new Date(0);
-        Date now = new Date(3_600_000);
-        Document expr = DeviceService.buildOnlineTimeWithCurrentSession(todayStart, now);
-
-        Map<String, Object> device = new LinkedHashMap<>();
-        device.put("online", true);
-        device.put("onlineAt", todayStart);
-        device.put("ol", new Document("ws", todayStart)
-                .append("base", 4_000L)
-                .append("sec", 4_000L));
-
-        Document result = (Document) eval(expr, device);
-
-        assertEquals(todayStart, result.get("ws"));
-        assertEquals(3_600L, result.get("base"));
-        assertEquals(3_600L, result.get("sec"));
-    }
-
-    @Test
-    void onlineCounterCapsOfflineBaseAtElapsedWindowSeconds() {
-        Date todayStart = new Date(0);
-        Date now = new Date(3_600_000);
-        Document expr = DeviceService.buildOnlineTimeWithCurrentSession(todayStart, now);
-
-        Map<String, Object> device = new LinkedHashMap<>();
-        device.put("online", false);
-        device.put("ol", new Document("ws", todayStart)
-                .append("base", 4_000L)
-                .append("sec", 4_000L));
-
-        Document result = (Document) eval(expr, device);
-
-        assertEquals(todayStart, result.get("ws"));
-        assertEquals(3_600L, result.get("base"));
-        assertEquals(3_600L, result.get("sec"));
-    }
-
-    @Test
-    void completedSessionCounterCapsBaseAndSecondsAtElapsedWindowSeconds() {
-        Date todayStart = new Date(0);
-        Date offlineAt = new Date(3_600_000);
-        Document expr = DeviceService.buildOnlineCounterExpr(1_000L, todayStart, offlineAt);
-
-        Map<String, Object> device = new LinkedHashMap<>();
-        device.put("ol", new Document("ws", todayStart)
-                .append("base", 4_000L)
-                .append("sec", 4_000L));
-
-        Document result = (Document) eval(expr, device);
-
-        assertEquals(todayStart, result.get("ws"));
-        assertEquals(3_600L, result.get("base"));
-        assertEquals(3_600L, result.get("sec"));
-    }
-
-    @Test
-    void locationCounterAccumulatesT0704EventCount() {
-        Date todayStart = new Date(0);
-        Document expr = DeviceService.buildLocationCounterExpr("dl", 3, 2, 600L, 1L, todayStart);
-
-        Map<String, Object> device = new LinkedHashMap<>();
-        device.put("dl", new Document("ws", todayStart)
-                .append("tot", 5)
-                .append("bad", 1)
-                .append("ratio", 0.2)
-                .append("sd", 300L)
-                .append("ec", 2L));
-
-        Document result = (Document) eval(expr, device);
-
-        assertEquals(todayStart, result.get("ws"));
-        assertEquals(8L, result.get("tot"));
-        assertEquals(3L, result.get("bad"));
-        assertEquals(0.375, (double) result.get("ratio"), 0.0001);
-        assertEquals(900L, result.get("sd"));
-        assertEquals(3L, result.get("ec"));
-    }
-
-    @Test
-    void durationCounterCanUpdateAccOffWorkField() {
-        Date todayStart = new Date(0);
-        Date offlineAt = new Date(3_600_000);
-        Document expr = DeviceService.buildDurationCounterExpr("ao", 1_000L, todayStart, offlineAt);
-
-        Map<String, Object> device = new LinkedHashMap<>();
-        device.put("ao", new Document("ws", todayStart)
-                .append("base", 500L)
-                .append("sec", 500L));
-        device.put("ol", new Document("ws", todayStart)
-                .append("base", 3_000L)
-                .append("sec", 3_000L));
-
-        Document result = (Document) eval(expr, device);
-
-        assertEquals(todayStart, result.get("ws"));
-        assertEquals(1_500L, result.get("base"));
-        assertEquals(1_500L, result.get("sec"));
-    }
-
     private static Object eval(Object expr, Map<String, Object> root) {
         if (expr instanceof String s && s.startsWith("$"))
             return resolvePath(root, s.substring(1));
@@ -193,6 +186,12 @@ class DeviceServiceTest {
             case "$eq" -> {
                 List<Object> args = (List<Object>) arg;
                 yield eval(args.get(0), root).equals(eval(args.get(1), root));
+            }
+            case "$in" -> {
+                List<Object> args = (List<Object>) arg;
+                Object value = eval(args.get(0), root);
+                List<Object> values = (List<Object>) eval(args.get(1), root);
+                yield values.contains(value);
             }
             case "$cond" -> {
                 List<Object> args = (List<Object>) arg;

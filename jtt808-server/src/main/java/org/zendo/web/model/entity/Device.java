@@ -9,7 +9,6 @@ import org.springframework.data.mongodb.core.mapping.Document;
 import org.springframework.data.mongodb.core.mapping.Field;
 
 import java.time.LocalDateTime;
-import java.util.Map;
 import java.util.Objects;
 
 @Data
@@ -53,6 +52,10 @@ public class Device {
     @Field("iurl")
     private String instanceUrl;
 
+    @Schema(description = "当前TCP连接事件ID", hidden = true)
+    @Field("sid")
+    private String sessionId;
+
     @Schema(description = "是否在线")
     @Field("online")
     private boolean online;
@@ -64,38 +67,6 @@ public class Device {
     @Schema(description = "最近离线时间 (UTC)")
     @Field("offlineAt")
     private LocalDateTime offlineAt;
-
-    @Schema(description = "GPS质量滚动统计（卫星数）", hidden = true)
-    @Field("dg")
-    private DeviceDiagStat diagGps;
-
-    @Schema(description = "信号强度滚动统计", hidden = true)
-    @Field("ds")
-    private DeviceDiagStat diagSig;
-
-    @Schema(description = "告警类型滚动统计 (key=告警类型, e.g. \"v14\")", hidden = true)
-    @Field("dw")
-    private Map<String, DeviceDiagStat> diagAlarms;
-
-    @Schema(description = "每日在线时长统计（秒）", hidden = true)
-    @Field("ol")
-    private DeviceOnlineStat diagOnline;
-
-    @Schema(description = "每日里程统计（米）", hidden = true)
-    @Field("ml")
-    private DeviceMileageStat diagMileage;
-
-    @Schema(description = "位置上报统计（补传数/总数）", hidden = true)
-    @Field("dl")
-    private DeviceDiagStat diagLoc;
-
-    @Schema(description = "离线统计（异常离线数/总离线数）", hidden = true)
-    @Field("df")
-    private DeviceDiagStat diagOffline;
-
-    @Schema(description = "ACC关闭后工作时长统计（秒）", hidden = true)
-    @Field("ao")
-    private DeviceOnlineStat diagAccOffWork;
 
     public void updateStatus(DeviceStatus status) {
         if (this.status == null) {

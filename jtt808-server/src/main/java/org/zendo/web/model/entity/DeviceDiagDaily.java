@@ -9,16 +9,12 @@ import org.springframework.data.mongodb.core.mapping.Field;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Map;
 
 /**
- * Daily snapshot of a device's GPS and signal quality counters, written once
- * per device per calendar day when the day-boundary window expires.
- *
- * <p>
- * The composite {@code _id} ({@code mobileNo_YYYY-MM-DD}) makes writes
- * idempotent — concurrent resets from multiple server instances safely
- * overwrite each other with the same data.
+ * Live daily diagnostic aggregate. Telemetry and completed sessions update the
+ * document atomically using the composite {@code mobileNo_YYYY-MM-DD} ID.
  */
 @Data
 @Accessors(chain = true)
@@ -72,6 +68,14 @@ public class DeviceDiagDaily {
     /** When this summary record was written (UTC). */
     @Field("cat")
     private LocalDateTime createdAt;
+
+    /** Last time this live daily aggregate was updated (UTC). */
+    @Field("uat")
+    private LocalDateTime updatedAt;
+
+    /** Session event IDs already applied to this date, used for idempotency. */
+    @Field("se")
+    private List<String> sessionEventIds;
 
     public static String buildId(String mobileNo, LocalDate date) {
         return mobileNo + "_" + date;

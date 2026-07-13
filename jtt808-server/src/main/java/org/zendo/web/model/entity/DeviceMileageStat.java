@@ -6,15 +6,7 @@ import org.springframework.data.mongodb.core.mapping.Field;
 
 import java.time.LocalDateTime;
 
-/**
- * Rolling-window mileage counter embedded inside a {@link Device} document.
- * Stored as {@code "ml"} field. Tracks total mileage and daily mileage,
- * flushed to {@link DeviceDiagDaily} at day boundaries.
- * 
- * <p>
- * Mileage values are in meters (converted from 0x01 attribute which is in 1/10
- * km).
- */
+/** Daily mileage aggregate, in meters, derived from event-time readings. */
 @Data
 @Accessors(chain = true)
 public class DeviceMileageStat {
@@ -45,4 +37,12 @@ public class DeviceMileageStat {
      */
     @Field("day")
     private long dailyMeters;
+
+    /** Device timestamp of the first mileage reading used for this day. */
+    @Field("sat")
+    private LocalDateTime startAt;
+
+    /** Device timestamp of the latest mileage reading used for this day. */
+    @Field("eat")
+    private LocalDateTime endAt;
 }

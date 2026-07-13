@@ -70,8 +70,10 @@ public class JTSessionListener implements SessionListener {
      */
     @Override
     public void sessionRegistered(Session session) {
-        deviceService.setInstanceUrl(session.getClientId(), instanceUrl);
-        session.setAttribute(SessionKey.OnlineAt, LocalDateTime.now(ZoneOffset.UTC));
+        LocalDateTime onlineAt = LocalDateTime.now(ZoneOffset.UTC);
+        String sessionEventId = sessionEventId(session);
+        deviceService.setInstanceUrl(session.getClientId(), instanceUrl, sessionEventId, onlineAt);
+        session.setAttribute(SessionKey.OnlineAt, onlineAt);
         // Run asynchronously with a short delay so the T8003 auth ACK is fully
         // sent to the device before we attempt to dispatch pending commands.
         // Sending commands synchronously during sessionRegistered would queue
@@ -94,9 +96,14 @@ public class JTSessionListener implements SessionListener {
     public void sessionDestroyed(Session session) {
         LocalDateTime onlineAt = session.getAttribute(SessionKey.OnlineAt);
         LocalDateTime offlineAt = LocalDateTime.now(ZoneOffset.UTC);
-        deviceService.setInstanceUrl(session.getClientId(), null);
+        String sessionEventId = sessionEventId(session);
+        deviceService.setInstanceUrl(session.getClientId(), null, sessionEventId, offlineAt);
         if (onlineAt != null) {
-            deviceService.recordSessionEnd(session.getClientId(), onlineAt, offlineAt);
+            deviceService.recordSessionEnd(session.getClientId(), sessionEventId, onlineAt, offlineAt);
         }
+    }
+
+    private static String sessionEventId(Session session) {
+        return session.getClientId() + ':' + session.getCreationTime();
     }
 }

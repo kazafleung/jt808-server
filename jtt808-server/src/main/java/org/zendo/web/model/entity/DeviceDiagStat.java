@@ -6,20 +6,12 @@ import org.springframework.data.mongodb.core.mapping.Field;
 
 import java.time.LocalDateTime;
 
-/**
- * Rolling-window diagnostic counter embedded inside a {@link Device} document.
- * Stored as {@code "dg"} (GPS) and {@code "ds"} (signal) fields.
- *
- * <p>
- * The window resets lazily whenever a location update arrives after
- * {@code ws + windowHours} has elapsed — handled atomically via a MongoDB
- * aggregation-pipeline update in {@code DeviceService}.
- */
+/** Counter embedded in a calendar-date diagnostic aggregate. */
 @Data
 @Accessors(chain = true)
 public class DeviceDiagStat {
 
-    /** Window start time (UTC) — resets when the window expires. */
+    /** Calendar-date start time in UTC. */
     @Field("ws")
     private LocalDateTime windowStart;
 
