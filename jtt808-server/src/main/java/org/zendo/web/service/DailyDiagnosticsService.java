@@ -232,8 +232,7 @@ public class DailyDiagnosticsService {
                         effectiveSeconds)),
                 maximumSeconds));
         return new Document("ws", dayStart)
-                .append("sec", newSeconds)
-                .append("base", newSeconds);
+                .append("sec", newSeconds);
     }
 
     private Document dailyIdentity(DailyKey key, Date updatedAt) {

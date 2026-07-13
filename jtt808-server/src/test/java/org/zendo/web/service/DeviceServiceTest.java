@@ -76,12 +76,10 @@ class DeviceServiceTest {
         Map<String, Object> root = new LinkedHashMap<>();
         root.put("se", List.of("session-1"));
         root.put("ol", new Document("ws", dayStart)
-                .append("base", 1_000L)
                 .append("sec", 1_000L));
 
         Document result = (Document) eval(expr, root);
 
-        assertEquals(1_000L, result.get("base"));
         assertEquals(1_000L, result.get("sec"));
     }
 

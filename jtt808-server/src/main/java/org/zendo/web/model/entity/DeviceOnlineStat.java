@@ -23,9 +23,4 @@ public class DeviceOnlineStat {
     @Field("sec")
     private long seconds;
 
-    /**
-     * Compatibility mirror of {@link #seconds}.
-     */
-    @Field("base")
-    private long baseSeconds;
 }

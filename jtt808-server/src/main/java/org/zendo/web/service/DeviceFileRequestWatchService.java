@@ -336,7 +336,7 @@ public class DeviceFileRequestWatchService implements SmartLifecycle {
             String filename = "ch" + cmd.getChannelNo()
                     + "_" + cmd.getStartTime().format(fmt)
                     + "_" + cmd.getEndTime().format(fmt)
-                    + ".avi";
+                    + ".mp4";
             return base + "/" + filename;
         }
         if ("Citops".equalsIgnoreCase(manufacturer)) {
