@@ -1,12 +1,19 @@
 package org.zendo.protocol.commons.transform.attribute;
 
+import org.springframework.data.annotation.Transient;
 import org.zendo.protocol.t808.T0200;
 
 import java.time.LocalDateTime;
 
 public abstract class Alarm {
 
-    private T0200 location;
+    /**
+     * Runtime context used by alarm consumers to access the containing location
+     * report. It must not be persisted: the report owns this alarm through its
+     * attributes map, so persisting this back-reference creates an object cycle.
+     */
+    @Transient
+    private transient T0200 location;
 
     private String platformAlarmId;
 
