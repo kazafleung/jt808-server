@@ -70,7 +70,7 @@ public class JT808Endpoint {
                 .orElse(null);
 
         if (device == null) {
-            log.warn("Device registration rejected - device not found in database: mobileNo={}",
+            log.warn("Device registration rejected - device not found in database: clientId={}",
                     message.getClientId());
             result.setResultCode(T8100.NotFoundTerminal);
             return result;
@@ -81,7 +81,6 @@ public class JT808Endpoint {
         // Update existing device information
         device.setProtocolVersion(message.getProtocolVersion());
         device.setDeviceId(message.getDeviceId());
-        device.setPlateNo(message.getPlateNo());
         Device saved = deviceService.saveOrUpdate(device);
         session.setAttribute(SessionKey.Device, saved);
 
@@ -101,7 +100,7 @@ public class JT808Endpoint {
                 .orElse(null);
 
         if (device == null) {
-            log.warn("Device authentication rejected - device not found in database: mobileNo={}",
+            log.warn("Device authentication rejected - device not found in database: clientId={}",
                     message.getClientId());
             result.setResultCode(T0001.Failure);
             return result;

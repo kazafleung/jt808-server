@@ -20,11 +20,10 @@ public class Device {
     private String id;
 
     @Schema(description = "设备id")
-    @Indexed
     @Field("did")
     private String deviceId;
-    @Schema(description = "设备手机号")
-    @Indexed(unique = true)
+    @Schema(description = "JT808 clientId（旧存储字段 mob）")
+    @Indexed(unique = true, sparse = true)
     @Field("mob")
     private String mobileNo;
 

@@ -56,18 +56,16 @@ public class DeviceService {
                             Query.query(Criteria.where("_id").is(existing.getId())),
                             new Update()
                                     .set("did", device.getDeviceId())
-                                    .set("pln", device.getPlateNo())
                                     .set("pv", device.getProtocolVersion()),
                             Device.class);
                     existing.setDeviceId(device.getDeviceId());
-                    existing.setPlateNo(device.getPlateNo());
                     existing.setProtocolVersion(device.getProtocolVersion());
                     return existing;
                 })
                 .orElseGet(() -> {
                     device.setRegisteredAt(LocalDateTime.now());
                     Device saved = deviceRepository.save(device);
-                    log.info("New device registered: mobileNo={}, deviceId={}", saved.getMobileNo(),
+                    log.info("New device registered: clientId={}, deviceId={}", saved.getMobileNo(),
                             saved.getDeviceId());
                     return saved;
                 });
